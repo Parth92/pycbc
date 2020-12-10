@@ -230,8 +230,8 @@ class PhaseTDStatistic(NewSNRStatistic):
                              ('coa_phase', numpy.float32),
                              ('end_time', numpy.float64),
                              ('sigmasq', numpy.float32),
-                             ('snr', numpy.float32)
-                             ]
+                             ('snr', numpy.float32),
+                             ('probs', numpy.float32)]
 
         # Assign attribute so that it can be replaced with other functions
         self.get_newsnr = ranking.get_newsnr
@@ -795,6 +795,219 @@ class ExpFitSGFgBgRateStatistic(PhaseTDStatistic, ExpFitSGBgRateStatistic):
         return loglr
 
 
+class MLStatistic_PhaseTDStatistic(PhaseTDStatistic):
+
+    """Statistic combining PhaseTDStatistic with ML based probability of resp triggers being chirp like
+    """
+
+    def __init__(self, files):
+        PhaseTDStatistic.__init__(self, files)
+
+    def single(self, trigs):
+        # same single-ifo stat as PhaseTDStatistic
+        sngl_stat = PhaseTDStatistic.single(self, trigs)
+        singles = numpy.zeros(len(sngl_stat), dtype=self.single_dtype)
+        singles['snglstat'] = sngl_stat
+        singles['coa_phase'] = trigs['coa_phase']
+        singles['end_time'] = trigs['end_time']
+        singles['sigmasq'] = trigs['sigmasq']
+        singles['snr'] = trigs['snr']
+        singles['probs'] = trigs['probs']
+        return numpy.array(singles, ndmin=1)
+
+    def logsignalrate(self, s0, s1, slide, step):
+        """Calculate the normalized log rate density of signals via lookup"""
+        td = numpy.array(s0['end_time'] - s1['end_time'] - slide*step, ndmin=1)
+        pd = numpy.array((s0['coa_phase'] - s1['coa_phase']) % \
+                         (2. * numpy.pi), ndmin=1)
+        rd = numpy.array((s0['sigmasq'] / s1['sigmasq']) ** 0.5, ndmin=1)
+        sn0 = numpy.array(s0['snr'], ndmin=1)
+        sn1 = numpy.array(s1['snr'], ndmin=1)
+
+        snr0 = sn0 * 1
+        snr1 = sn1 * 1
+
+        snr0[rd > 1] = sn1[rd > 1]
+        snr1[rd > 1] = sn0[rd > 1]
+        rd[rd > 1] = 1. / rd[rd > 1]
+
+        # Find which bin each coinc falls into
+        tv = numpy.searchsorted(self.tbins, td) - 1
+        pv = numpy.searchsorted(self.pbins, pd) - 1
+        s0v = numpy.searchsorted(self.sbins, snr0) - 1
+        s1v = numpy.searchsorted(self.sbins, snr1) - 1
+        rv = numpy.searchsorted(self.rbins, rd) - 1
+
+        # Enforce that points fits into the bin boundaries: if a point lies
+        # outside the boundaries it is pushed back to the nearest bin.
+        tv[tv < 0] = 0
+        tv[tv >= len(self.tbins) - 1] = len(self.tbins) - 2
+        pv[pv < 0] = 0
+        pv[pv >= len(self.pbins) - 1] = len(self.pbins) - 2
+        s0v[s0v < 0] = 0
+        s0v[s0v >= len(self.sbins) - 1] = len(self.sbins) - 2
+        s1v[s1v < 0] = 0
+        s1v[s1v >= len(self.sbins) - 1] = len(self.sbins) - 2
+        rv[rv < 0] = 0
+        rv[rv >= len(self.rbins) - 1] = len(self.rbins) - 2
+
+        return self.hist[tv, pv, s0v, s1v, rv]
+
+    def coinc(self, s0, s1, slide, step):
+        """
+        Calculate the coincident detection statistic.
+
+        Parameters
+        ----------
+        s0: numpy.ndarray
+            Single detector ranking statistic for the first detector.
+        s1: numpy.ndarray
+            Single detector ranking statistic for the second detector.
+        slide: numpy.ndarray
+            Array of ints. These represent the multiple of the timeslide
+        interval to bring a pair of single detector triggers into coincidence.
+        step: float
+            The timeslide interval in seconds.
+
+        Returns
+        -------
+        coinc_stat: numpy.ndarray
+            An array of the coincident ranking statistic values
+        """
+        rstat = s0['snglstat']**2. + s1['snglstat']**2.
+        cstat = rstat + 2. * self.logsignalrate(s0, s1, slide, step) + 2. * numpy.log(s0['probs'] * s1['probs'])
+        cstat[cstat < 0] = 0
+        return cstat ** 0.5
+
+    def coinc_prob(self, s0, s1):
+        """
+        Return the combined P_chirp probability.
+
+        Parameters
+        ----------
+        s0: numpy.ndarray
+            Single detector ranking statistic for the first detector.
+        s1: numpy.ndarray
+            Single detector ranking statistic for the second detector.
+
+        Returns
+        -------
+        probs: numpy.ndarray
+            An array of the combined probability values
+        """
+        return (s0['probs'] * s1['probs'])
+
+
+class MLStatistic_newsnr(NewSNRStatistic):
+
+    """Statistic combining NewSNRStatistic with ML based probability of resp triggers being chirp like
+    """
+
+    def __init__(self, files):
+        NewSNRStatistic.__init__(self, files)
+        self.single_dtype = [('snglstat', numpy.float32),
+                    ('coa_phase', numpy.float32),
+                    ('end_time', numpy.float64),
+                    ('sigmasq', numpy.float32),
+                    ('snr', numpy.float32),
+                    ('probs', numpy.float32)]
+
+    def single(self, trigs):
+        # same single-ifo stat as NewSNRStatistic
+        sngl_stat = NewSNRStatistic.single(self, trigs)
+        singles = numpy.zeros(len(sngl_stat), dtype=self.single_dtype)
+        singles['snglstat'] = sngl_stat
+        singles['coa_phase'] = trigs['coa_phase']
+        singles['end_time'] = trigs['end_time']
+        singles['sigmasq'] = trigs['sigmasq']
+        singles['snr'] = trigs['snr']
+        singles['probs'] = trigs['probs']
+        return numpy.array(singles, ndmin=1)
+
+    def coinc(self, s0, s1, slide, step):
+        """
+        Calculate the coincident detection statistic.
+
+        Parameters
+        ----------
+        s0: numpy.ndarray
+            Single detector ranking statistic for the first detector.
+        s1: numpy.ndarray
+            Single detector ranking statistic for the second detector.
+        slide: numpy.ndarray
+            Array of ints. These represent the multiple of the timeslide
+        interval to bring a pair of single detector triggers into coincidence.
+        step: float
+            The timeslide interval in seconds.
+
+        Returns
+        -------
+        coinc_stat: numpy.ndarray
+            An array of the coincident ranking statistic values
+        """
+        rstat = s0['snglstat']**2. + s1['snglstat']**2.
+        cstat = rstat + 2. * numpy.log(s0['probs'] * s1['probs'])
+        cstat[cstat < 0] = 0
+        return cstat ** 0.5
+
+    def coinc_prob(self, s0, s1):
+        """
+        Return the combined P_chirp probability.
+
+        Parameters
+        ----------
+        s0: numpy.ndarray
+            Single detector ranking statistic for the first detector.
+        s1: numpy.ndarray
+            Single detector ranking statistic for the second detector.
+
+        Returns
+        -------
+        probs: numpy.ndarray
+            An array of the combined probability values
+        """
+        return (s0['probs'] * s1['probs'])
+
+
+class MLStatistic_PhTDExpFitSGStat(PhaseTDExpFitSGStatistic):
+
+    """MLStat on top of the statistic combining exponential noise model with signal histogram PDF
+       and adding the sine-Gaussian veto to the single detector ranking
+    """
+
+    def __init__(self, files):
+        PhaseTDExpFitSGStatistic.__init__(self, files)
+
+    def single(self, trigs):
+        singles = PhaseTDExpFitSGStatistic.single(self, trigs)
+        singles['probs'] = trigs['probs']
+        return numpy.array(singles, ndmin=1)
+
+    def coinc(self, s0, s1, slide, step):
+        rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
+        cstat = rstat**2. + 2. * numpy.log(s0['probs'] * s1['probs'])
+        cstat[cstat < 0] = 0
+        return cstat ** 0.5
+
+    def coinc_prob(self, s0, s1):
+        """
+        Return the combined P_chirp probability.
+
+        Parameters
+        ----------
+        s0: numpy.ndarray
+            Single detector ranking statistic for the first detector.
+        s1: numpy.ndarray
+            Single detector ranking statistic for the second detector.
+
+        Returns
+        -------
+        probs: numpy.ndarray
+            An array of the combined probability values
+        """
+        return (s0['probs'] * s1['probs'])
+
+
 statistic_dict = {
     'newsnr': NewSNRStatistic,
     'network_snr': NetworkSNRStatistic,
@@ -812,7 +1025,10 @@ statistic_dict = {
     'newsnr_sgveto_psdvar': NewSNRSGPSDStatistic,
     'phasetd_exp_fit_stat_sgveto_psdvar': PhaseTDExpFitSGPSDStatistic,
     'exp_fit_sg_bg_rate': ExpFitSGBgRateStatistic,
-    'exp_fit_sg_fgbg_rate': ExpFitSGFgBgRateStatistic
+    'exp_fit_sg_fgbg_rate': ExpFitSGFgBgRateStatistic,
+    'ml_stat_newsnr': MLStatistic_newsnr,
+    'ml_stat_phasetd_newsnr': MLStatistic_PhaseTDStatistic,
+    'ml_stat_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat
 }
 
 sngl_statistic_dict = {

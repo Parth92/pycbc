@@ -69,6 +69,8 @@ parser.add_argument('--hierarchical-removal-against', type=str,
                          'exclusive (little-dogs-out) background. Choose by '
                          'entering <inclusive> or <exclusive>. '
                          '[default=None]')
+parser.add_argument('--ml-processed', action='store_true', default=None,
+                    help='If bkg files are ML processed, [default=None]')
 parser.add_argument('--output-file')
 args = parser.parse_args()
 
@@ -95,8 +97,12 @@ else :
 
 pycbc.init_logging(args.verbose)
 
-logging.info("Loading coinc triggers")    
-all_trigs = pycbc.io.StatmapData(files=args.coinc_files)
+logging.info("Loading coinc triggers")
+
+if args.ml_processed:
+    all_trigs = pycbc.io.StatmapData(files=args.coinc_files, containsMLprobs=True)
+else:
+    all_trigs = pycbc.io.StatmapData(files=args.coinc_files)
 
 logging.info("We have %s triggers" % len(all_trigs.stat))
 fore_locs = all_trigs.timeslide_id == 0

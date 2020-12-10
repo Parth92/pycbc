@@ -188,6 +188,11 @@ if args.strict_coinc_time:
 
 # initialize a Stat class instance to calculate the coinc ranking statistic
 rank_method = stat.get_statistic(args.ranking_statistic)(args.statistic_files)
+
+##### MLStat change #####
+print args.ranking_statistic
+
+
 if args.use_maxalpha:
     rank_method.use_alphamax()
 det0, det1 = detector.Detector(trigs0.ifo), detector.Detector(trigs1.ifo)
@@ -204,15 +209,30 @@ if args.timeslide_interval is None:
 
 logging.info('The coincidence window is %3.1f ms' % (time_window * 1000))
 
-data = {'stat': [],
-        'decimation_factor': [],
-        'time1': [],
-        'time2': [],
-        'trigger_id1': [],
-        'trigger_id2': [],
-        'timeslide_id': [],
-        'template_id':[]
-}
+##### MLStat change #####
+if args.ranking_statistic.startswith('ml_stat'):
+    data = {'stat': [],
+            'decimation_factor': [],
+            'time1': [],
+            'time2': [],
+            'trigger_id1': [],
+            'trigger_id2': [],
+            'timeslide_id': [],
+            'template_id': [],
+            'probs': [],
+            'p1': [],
+            'p2': []
+    }
+else:
+    data = {'stat': [],
+            'decimation_factor': [],
+            'time1': [],
+            'time2': [],
+            'trigger_id1': [],
+            'trigger_id2': [],
+            'timeslide_id': [],
+            'template_id': []
+    }
 
 if args.randomize_template_order:
     seed(0)
@@ -269,6 +289,13 @@ for tnum in template_ids:
             c = rank_method.coinc(s0[i0], s1[i1], slide,
                                   args.timeslide_interval)
 
+            ##### MLStat change #####
+            if args.ranking_statistic.startswith('ml_stat'):
+                cp = rank_method.coinc_prob(s0[i0], s1[i1])
+                p1 = s0[i0]['probs']
+                p2 = s1[i1]['probs']
+
+
             #index values of the zerolag triggers
             fi = numpy.where(slide == 0)[0]
 
@@ -314,6 +341,13 @@ for tnum in template_ids:
             del i1
 
             data['stat'] += [c[ti]]
+
+            ##### MLStat change #####
+            if args.ranking_statistic.startswith('ml_stat'):
+                data['probs'] += [cp[ti]]
+                data['p1'] += [p1[ti]]
+                data['p2'] += [p2[ti]]
+
             data['decimation_factor'] += [dec_fac]
             data['time1'] += [t0[g0]]
             data['time2'] += [t1[g1]]
@@ -321,6 +355,12 @@ for tnum in template_ids:
             data['trigger_id2'] += [tid1[g1]]
             data['timeslide_id'] += [slide[ti]]
             data['template_id'] += [numpy.repeat(tnum, len(ti))]
+
+            ##### MLStat change #####
+            if len(fi) > 0:
+                print "\nstat: {}, template_id: {}".format(c[ti], tnum)   #t1: {}, t2: {}, ;, t0[g0], t1[g1]
+                if args.ranking_statistic.startswith('ml_stat'):
+                    print "\nCoinc_probs: {}".format(cp[ti])
 
             start1 += args.batch_singles
         start0 += args.batch_singles
