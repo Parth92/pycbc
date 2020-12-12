@@ -190,7 +190,7 @@ if args.strict_coinc_time:
 rank_method = stat.get_statistic(args.ranking_statistic)(args.statistic_files)
 
 ##### MLStat change #####
-print args.ranking_statistic
+print(args.ranking_statistic)
 
 
 if args.use_maxalpha:
