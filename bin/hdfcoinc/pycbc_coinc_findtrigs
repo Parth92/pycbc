@@ -190,7 +190,7 @@ if args.strict_coinc_time:
 rank_method = stat.get_statistic(args.ranking_statistic)(args.statistic_files)
 
 ##### MLStat change #####
-print args.ranking_statistic
+print(args.ranking_statistic)
 
 
 if args.use_maxalpha:
@@ -221,7 +221,9 @@ if args.ranking_statistic.startswith('ml_stat'):
             'template_id': [],
             'probs': [],
             'p1': [],
-            'p2': []
+            'p2': [],
+            'p1_GN': [],
+            'p2_GN': []
     }
 else:
     data = {'stat': [],
@@ -294,6 +296,8 @@ for tnum in template_ids:
                 cp = rank_method.coinc_prob(s0[i0], s1[i1])
                 p1 = s0[i0]['probs']
                 p2 = s1[i1]['probs']
+                p1_GN = s0[i0]['probs_GN']
+                p2_GN = s1[i1]['probs_GN']
 
 
             #index values of the zerolag triggers
@@ -347,6 +351,8 @@ for tnum in template_ids:
                 data['probs'] += [cp[ti]]
                 data['p1'] += [p1[ti]]
                 data['p2'] += [p2[ti]]
+                data['p1_GN'] += [p1_GN[ti]]
+                data['p2_GN'] += [p2_GN[ti]]
 
             data['decimation_factor'] += [dec_fac]
             data['time1'] += [t0[g0]]
@@ -358,9 +364,9 @@ for tnum in template_ids:
 
             ##### MLStat change #####
             if len(fi) > 0:
-                print "\nstat: {}, template_id: {}".format(c[ti], tnum)   #t1: {}, t2: {}, ;, t0[g0], t1[g1]
+                print("\nstat: {}, template_id: {}".format(c[ti], tnum))   #t1: {}, t2: {}, ;, t0[g0], t1[g1]
                 if args.ranking_statistic.startswith('ml_stat'):
-                    print "\nCoinc_probs: {}".format(cp[ti])
+                    print("\nCoinc_probs: {}".format(cp[ti]))
 
             start1 += args.batch_singles
         start0 += args.batch_singles
