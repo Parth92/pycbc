@@ -231,7 +231,8 @@ class PhaseTDStatistic(NewSNRStatistic):
                              ('end_time', numpy.float64),
                              ('sigmasq', numpy.float32),
                              ('snr', numpy.float32),
-                             ('probs', numpy.float32)]
+                             ('probs', numpy.float32),
+                             ('probs_GN', numpy.float32)]
 
         # Assign attribute so that it can be replaced with other functions
         self.get_newsnr = ranking.get_newsnr
@@ -813,6 +814,7 @@ class MLStatistic_PhaseTDStatistic(PhaseTDStatistic):
         singles['sigmasq'] = trigs['sigmasq']
         singles['snr'] = trigs['snr']
         singles['probs'] = trigs['probs']
+        singles['probs_GN'] = trigs['probs_GN']
         return numpy.array(singles, ndmin=1)
 
     def logsignalrate(self, s0, s1, slide, step):
@@ -910,7 +912,8 @@ class MLStatistic_newsnr(NewSNRStatistic):
                     ('end_time', numpy.float64),
                     ('sigmasq', numpy.float32),
                     ('snr', numpy.float32),
-                    ('probs', numpy.float32)]
+                    ('probs', numpy.float32),
+                    ('probs_GN', numpy.float32)]
 
     def single(self, trigs):
         # same single-ifo stat as NewSNRStatistic
@@ -922,6 +925,7 @@ class MLStatistic_newsnr(NewSNRStatistic):
         singles['sigmasq'] = trigs['sigmasq']
         singles['snr'] = trigs['snr']
         singles['probs'] = trigs['probs']
+        singles['probs_GN'] = trigs['probs_GN']
         return numpy.array(singles, ndmin=1)
 
     def coinc(self, s0, s1, slide, step):
@@ -981,6 +985,7 @@ class MLStatistic_PhTDExpFitSGStat(PhaseTDExpFitSGStatistic):
     def single(self, trigs):
         singles = PhaseTDExpFitSGStatistic.single(self, trigs)
         singles['probs'] = trigs['probs']
+        singles['probs_GN'] = trigs['probs_GN']
         return numpy.array(singles, ndmin=1)
 
     def coinc(self, s0, s1, slide, step):
