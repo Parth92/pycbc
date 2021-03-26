@@ -30,6 +30,8 @@ parser.add_argument('--veto-window', type=float, default=.1,
 parser.add_argument("--ranking-statistic-threshold", type=float,
                     help="Minimum value of the ranking statistic to calculate"
                          " a unique inclusive background.")
+parser.add_argument('--ml-processed', action='store_true', default=None,
+                    help='If bkg files are ML processed, [default=None]')
 parser.add_argument('--output-file')
 args = parser.parse_args()
 
@@ -39,7 +41,12 @@ if args.verbose:
 
 logging.info("Loading coinc zerolag triggers")
 window = args.cluster_window
-zdata = pycbc.io.StatmapData(files=args.zero_lag_coincs)
+
+if args.ml_processed:
+    zdata = pycbc.io.StatmapData(files=args.zero_lag_coincs, containsMLprobs=True)
+else:
+    zdata = pycbc.io.StatmapData(files=args.zero_lag_coincs)
+
 zdata = zdata.cluster(window)
 
 logging.info("Loading coinc full inj triggers")

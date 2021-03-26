@@ -69,6 +69,8 @@ parser.add_argument('--redshift-column', default=None,
                     help='Name of sim_inspiral column containing redshift. '
                     'Optional')
 parser.add_argument('--verbose', action='count')
+parser.add_argument('--ml-processed', action='store_true', default=None,
+                    help='If trig files are ML processed, [default=None]')
 parser.add_argument('--output-file', required=True)
 args = parser.parse_args()
 
@@ -106,6 +108,12 @@ for trigger_file, injection_file in zip(args.trigger_files,
     stat = f['foreground/stat'][:]
     ifar_exc = f['foreground/ifar_exc'][:]
     fap_exc = f['foreground/fap_exc'][:]
+    if args.ml_processed:
+        p1 = f['foreground/p1'][:]
+        p1_GN = f['foreground/p1_GN'][:]
+        p2 = f['foreground/p2'][:]
+        p2_GN = f['foreground/p2_GN'][:]
+        probs = f['foreground/probs'][:]
     try:
         ifar = f['foreground/ifar'][:]
         fap = f['foreground/fap'][:]
@@ -264,6 +272,12 @@ for trigger_file, injection_file in zip(args.trigger_files,
     hdf_append(fo, 'found/stat', stat[time_sorting][found_fore])
     hdf_append(fo, 'found/ifar_exc', ifar_exc[time_sorting][found_fore])
     hdf_append(fo, 'found/fap_exc', ifar_exc[time_sorting][found_fore])
+    if args.ml_processed:
+        hdf_append(fo, 'found/p1', p1[time_sorting][found_fore])
+        hdf_append(fo, 'found/p1_GN', p1_GN[time_sorting][found_fore])
+        hdf_append(fo, 'found/p2', p2[time_sorting][found_fore])
+        hdf_append(fo, 'found/p2_GN', p2_GN[time_sorting][found_fore])
+        hdf_append(fo, 'found/probs', probs[time_sorting][found_fore])
     if ifar is not None:
         hdf_append(fo, 'found/ifar', ifar[time_sorting][found_fore])
         hdf_append(fo, 'found/fap', fap[time_sorting][found_fore])
@@ -274,6 +288,12 @@ for trigger_file, injection_file in zip(args.trigger_files,
     hdf_append(fo, 'found_after_vetoes/stat', stat[time_sorting][found_fore_v])
     hdf_append(fo, 'found_after_vetoes/ifar_exc', ifar_exc[time_sorting][found_fore_v])
     hdf_append(fo, 'found_after_vetoes/fap_exc', fap_exc[time_sorting][found_fore_v])
+    if args.ml_processed:
+        hdf_append(fo, 'found_after_vetoes/p1', p1[time_sorting][found_fore_v])
+        hdf_append(fo, 'found_after_vetoes/p1_GN', p1_GN[time_sorting][found_fore_v])
+        hdf_append(fo, 'found_after_vetoes/p2', p2[time_sorting][found_fore_v])
+        hdf_append(fo, 'found_after_vetoes/p2_GN', p2_GN[time_sorting][found_fore_v])
+        hdf_append(fo, 'found_after_vetoes/probs', probs[time_sorting][found_fore_v])
     if ifar is not None:
         hdf_append(fo, 'found_after_vetoes/ifar', ifar[time_sorting][found_fore_v])
         hdf_append(fo, 'found_after_vetoes/fap', fap[time_sorting][found_fore_v])
