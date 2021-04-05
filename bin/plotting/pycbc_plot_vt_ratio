@@ -18,6 +18,8 @@ parser.add_argument('--desc-one',  required=True,
                     help='descriptor tag for first set of data (short, for use in subscript)')
 parser.add_argument('--desc-two', type=str, required=True,
                     help='descriptor tag for second set of data (short, for use in subscript)')
+parser.add_argument('--title', type=str,
+                    help='title of the plot (optional)')
 parser.add_argument('--outfile', type=str, required=True,
                     help='Output file to save to')
 parser.add_argument('--ifars', type=float, required=True, nargs='+',
@@ -97,6 +99,8 @@ ax_mi.get_legend().get_title().set_fontsize('14')
 ax_mi.get_legend().get_frame().set_alpha(0.7)
 ax_mi.set_xlabel(x_param)
 ax_mi.set_ylabel(r'$\frac{VT(\mathrm{' + args.desc_one +'})}{VT(\mathrm{' + args.desc_two +'})}$')
+if not args.title:
+    ax_mi.set_title(args.title)
 plt.tight_layout()
 
 # write out to file, save as pdf if requested
