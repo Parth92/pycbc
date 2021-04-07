@@ -29,6 +29,7 @@ import logging
 import numpy
 from . import ranking
 from . import coinc_rate
+import pycbc.conversions
 
 
 class Stat(object):
@@ -877,7 +878,7 @@ class MLStatistic_PhaseTDStatistic(PhaseTDStatistic):
             An array of the coincident ranking statistic values
         """
         rstat = s0['snglstat']**2. + s1['snglstat']**2.
-        cstat = rstat + 2. * self.logsignalrate(s0, s1, slide, step) + 2. * numpy.log(s0['probs'] * s1['probs'])
+        cstat = rstat + 2. * self.logsignalrate(s0, s1, slide, step) + 2. * numpy.log(MLStatistic_PhaseTDStatistic.coinc_prob(self, s0['probs'], s1['probs']))
         cstat[cstat < 0] = 0
         return cstat ** 0.5
 
@@ -950,7 +951,7 @@ class MLStatistic_newsnr(NewSNRStatistic):
             An array of the coincident ranking statistic values
         """
         rstat = s0['snglstat']**2. + s1['snglstat']**2.
-        cstat = rstat + 2. * numpy.log(s0['probs'] * s1['probs'])
+        cstat = rstat + 2. * numpy.log(MLStatistic_newsnr.coinc_prob(self, s0['probs'], s1['probs']))
         cstat[cstat < 0] = 0
         return cstat ** 0.5
 
@@ -990,9 +991,95 @@ class MLStatistic_PhTDExpFitSGStat(PhaseTDExpFitSGStatistic):
 
     def coinc(self, s0, s1, slide, step):
         rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
-        cstat = rstat**2. + 2. * numpy.log(s0['probs'] * s1['probs'])
+        cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat.coinc_prob(self, s0['probs'], s1['probs']))
         cstat[cstat < 0] = 0
         return cstat ** 0.5
+
+    def coinc_prob(self, s0, s1):
+        """
+        Return the combined P_chirp probability.
+
+        Parameters
+        ----------
+        s0: numpy.ndarray
+            Single detector ranking statistic for the first detector.
+        s1: numpy.ndarray
+            Single detector ranking statistic for the second detector.
+
+        Returns
+        -------
+        probs: numpy.ndarray
+            An array of the combined probability values
+        """
+        return (s0['probs'] * s1['probs'])
+
+
+class MLStatistic_PhTDExpFitSGStat_XOR(PhaseTDExpFitSGStatistic):
+
+    """MLStat on top of the statistic combining exponential noise model with signal histogram PDF
+       and adding the sine-Gaussian veto to the single detector ranking
+    """
+
+    def __init__(self, files):
+        PhaseTDExpFitSGStatistic.__init__(self, files)
+
+    def single(self, trigs):
+        singles = PhaseTDExpFitSGStatistic.single(self, trigs)
+        singles['probs'] = trigs['probs']
+        singles['probs_GN'] = trigs['probs_GN']
+        return numpy.array(singles, ndmin=1)
+
+    def coinc(self, s0, s1, slide, step):
+        rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
+        cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat_XOR.coinc_prob(self, s0['probs'], s1['probs']))
+        cstat[cstat < 0] = 0
+        return cstat ** 0.5
+
+    def coinc_prob(self, s0, s1):
+        """
+        Return the combined P_chirp probability.
+
+        Parameters
+        ----------
+        s0: numpy.ndarray
+            Single detector ranking statistic for the first detector.
+        s1: numpy.ndarray
+            Single detector ranking statistic for the second detector.
+
+        Returns
+        -------
+        probs: numpy.ndarray
+            An array of the combined probability values
+        """
+        return (s0['probs'] + s1['probs'] - s0['probs'] * s1['probs'])
+
+
+class MLStatistic_PhTDExpFitSGStat_MCdep(PhaseTDExpFitSGStatistic):
+
+    """MLStat on top of the statistic combining exponential noise model with signal histogram PDF
+       and adding the sine-Gaussian veto to the single detector ranking
+    """
+
+    def __init__(self, files):
+        PhaseTDExpFitSGStatistic.__init__(self, files)
+
+    def single(self, trigs):
+        singles = PhaseTDExpFitSGStatistic.single(self, trigs)
+        singles['probs'] = trigs['probs']
+        singles['probs_GN'] = trigs['probs_GN']
+        return numpy.array(singles, ndmin=1)
+
+    def coinc(self, s0, s1, slide, step, params=None):
+        if not params:
+            raise ValueError('tempate params are necessary for this stat')
+        mchirp = pycbc.conversions.mchirp_from_mass1_mass2(params['mass1'], params['mass2'])
+        rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
+        if mchirp < 15.:
+            return rstat
+        else:
+            cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat_MCdep.coinc_prob(self, s0['probs'], s1['probs']))
+            cstat[cstat < 0] = 0
+            return cstat ** 0.5
 
     def coinc_prob(self, s0, s1):
         """
@@ -1033,7 +1120,9 @@ statistic_dict = {
     'exp_fit_sg_fgbg_rate': ExpFitSGFgBgRateStatistic,
     'ml_stat_newsnr': MLStatistic_newsnr,
     'ml_stat_phasetd_newsnr': MLStatistic_PhaseTDStatistic,
-    'ml_stat_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat
+    'ml_stat_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat,
+    'ml_stat_xor_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat_XOR,
+    'ml_alt_stat_mcdep_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat_MCdep
 }
 
 sngl_statistic_dict = {

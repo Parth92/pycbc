@@ -210,7 +210,7 @@ if args.timeslide_interval is None:
 logging.info('The coincidence window is %3.1f ms' % (time_window * 1000))
 
 ##### MLStat change #####
-if args.ranking_statistic.startswith('ml_stat'):
+if args.ranking_statistic[:2] == 'ml':
     data = {'stat': [],
             'decimation_factor': [],
             'time1': [],
@@ -253,6 +253,12 @@ for tnum in template_ids:
 
     t0g = trigs0['end_time']
     t1g = trigs1['end_time']
+
+    ##### MLStat change #####
+    if args.ranking_statistic.startswith('ml_alt_stat'):
+        # same template for coinc trigs, so extracting template params from only one trig set suffices
+        temp_params = trigs0.param
+
     logging.info('Trigs for template %s, %s:%s %s:%s' % \
                 (tnum, trigs0.ifo, len(t0g), trigs1.ifo, len(t1g)))
 
@@ -288,11 +294,18 @@ for tnum in template_ids:
 
 
             logging.info('Calculating Multi-Detector Combined Statistic: %s, %s', end0, end1)
-            c = rank_method.coinc(s0[i0], s1[i1], slide,
+
+            ##### MLStat change #####
+            if args.ranking_statistic.startswith('ml_alt_stat'):
+                c = rank_method.coinc(s0[i0], s1[i1], slide,
+                                  args.timeslide_interval,
+                                  params=temp_params)
+            else:
+                c = rank_method.coinc(s0[i0], s1[i1], slide,
                                   args.timeslide_interval)
 
             ##### MLStat change #####
-            if args.ranking_statistic.startswith('ml_stat'):
+            if args.ranking_statistic[:2] == 'ml':
                 cp = rank_method.coinc_prob(s0[i0], s1[i1])
                 p1 = s0[i0]['probs']
                 p2 = s1[i1]['probs']
@@ -347,7 +360,7 @@ for tnum in template_ids:
             data['stat'] += [c[ti]]
 
             ##### MLStat change #####
-            if args.ranking_statistic.startswith('ml_stat'):
+            if args.ranking_statistic[:2] == 'ml':
                 data['probs'] += [cp[ti]]
                 data['p1'] += [p1[ti]]
                 data['p2'] += [p2[ti]]
@@ -365,7 +378,7 @@ for tnum in template_ids:
             ##### MLStat change #####
             if len(fi) > 0:
                 print("\nstat: {}, template_id: {}".format(c[ti], tnum))   #t1: {}, t2: {}, ;, t0[g0], t1[g1]
-                if args.ranking_statistic.startswith('ml_stat'):
+                if args.ranking_statistic[:2] == 'ml':
                     print("\nCoinc_probs: {}".format(cp[ti]))
 
             start1 += args.batch_singles
