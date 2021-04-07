@@ -878,7 +878,7 @@ class MLStatistic_PhaseTDStatistic(PhaseTDStatistic):
             An array of the coincident ranking statistic values
         """
         rstat = s0['snglstat']**2. + s1['snglstat']**2.
-        cstat = rstat + 2. * self.logsignalrate(s0, s1, slide, step) + 2. * numpy.log(MLStatistic_PhaseTDStatistic.coinc_prob(self, s0['probs'], s1['probs']))
+        cstat = rstat + 2. * self.logsignalrate(s0, s1, slide, step) + 2. * numpy.log(MLStatistic_PhaseTDStatistic.coinc_prob(self, s0, s1))
         cstat[cstat < 0] = 0
         return cstat ** 0.5
 
@@ -951,7 +951,7 @@ class MLStatistic_newsnr(NewSNRStatistic):
             An array of the coincident ranking statistic values
         """
         rstat = s0['snglstat']**2. + s1['snglstat']**2.
-        cstat = rstat + 2. * numpy.log(MLStatistic_newsnr.coinc_prob(self, s0['probs'], s1['probs']))
+        cstat = rstat + 2. * numpy.log(MLStatistic_newsnr.coinc_prob(self, s0, s1))
         cstat[cstat < 0] = 0
         return cstat ** 0.5
 
@@ -991,7 +991,7 @@ class MLStatistic_PhTDExpFitSGStat(PhaseTDExpFitSGStatistic):
 
     def coinc(self, s0, s1, slide, step):
         rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
-        cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat.coinc_prob(self, s0['probs'], s1['probs']))
+        cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat.coinc_prob(self, s0, s1))
         cstat[cstat < 0] = 0
         return cstat ** 0.5
 
@@ -1031,7 +1031,7 @@ class MLStatistic_PhTDExpFitSGStat_XOR(PhaseTDExpFitSGStatistic):
 
     def coinc(self, s0, s1, slide, step):
         rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
-        cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat_XOR.coinc_prob(self, s0['probs'], s1['probs']))
+        cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat_XOR.coinc_prob(self, s0, s1))
         cstat[cstat < 0] = 0
         return cstat ** 0.5
 
@@ -1077,7 +1077,7 @@ class MLStatistic_PhTDExpFitSGStat_MCdep(PhaseTDExpFitSGStatistic):
         if mchirp < 15.:
             return rstat
         else:
-            cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat_MCdep.coinc_prob(self, s0['probs'], s1['probs']))
+            cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat_MCdep.coinc_prob(self, s0, s1))
             cstat[cstat < 0] = 0
             return cstat ** 0.5
 
