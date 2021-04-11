@@ -1014,7 +1014,7 @@ class MLStatistic_PhTDExpFitSGStat(PhaseTDExpFitSGStatistic):
         return (s0['probs'] * s1['probs'])
 
 
-class MLStatistic_PhTDExpFitSGStat_XOR(PhaseTDExpFitSGStatistic):
+class MLStatistic_PhTDExpFitSGStat_custom(PhaseTDExpFitSGStatistic):
 
     """MLStat on top of the statistic combining exponential noise model with signal histogram PDF
        and adding the sine-Gaussian veto to the single detector ranking
@@ -1031,7 +1031,7 @@ class MLStatistic_PhTDExpFitSGStat_XOR(PhaseTDExpFitSGStatistic):
 
     def coinc(self, s0, s1, slide, step):
         rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
-        cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat_XOR.coinc_prob(self, s0, s1))
+        cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat_custom.coinc_prob(self, s0, s1))
         cstat[cstat < 0] = 0
         return cstat ** 0.5
 
@@ -1051,7 +1051,15 @@ class MLStatistic_PhTDExpFitSGStat_XOR(PhaseTDExpFitSGStatistic):
         probs: numpy.ndarray
             An array of the combined probability values
         """
-        return (s0['probs'] + s1['probs'] - s0['probs'] * s1['probs'])
+        # minimum shd be above 0.5 and other shd be above 0.8
+        minprobs = s0['probs'].copy()
+        othrprobs = s1['probs'].copy()
+        minprobs[s0['probs']>s1['probs']] = s1['probs'][s0['probs']>s1['probs']]
+        minprobs[s0['probs']>s1['probs']] = s0['probs'][s0['probs']>s1['probs']]
+        ii = (minprobs > 0.5) & (othrprobs>0.8)
+        combprobs = s0['probs'] * s1['probs']
+        combprobs[ii] = 1.
+        return combprobs
 
 
 class MLStatistic_PhTDExpFitSGStat_MCdep(PhaseTDExpFitSGStatistic):
@@ -1121,7 +1129,7 @@ statistic_dict = {
     'ml_stat_newsnr': MLStatistic_newsnr,
     'ml_stat_phasetd_newsnr': MLStatistic_PhaseTDStatistic,
     'ml_stat_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat,
-    'ml_stat_xor_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat_XOR,
+    'ml_stat_custom_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat_custom,
     'ml_alt_stat_mcdep_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat_MCdep
 }
 
