@@ -1057,7 +1057,7 @@ class MLStatistic_PhTDExpFitSGStat_custom(PhaseTDExpFitSGStatistic):
         minprobs[s0['probs']>s1['probs']] = s1['probs'][s0['probs']>s1['probs']]
         minprobs[s0['probs']>s1['probs']] = s0['probs'][s0['probs']>s1['probs']]
         ii = (minprobs > 0.5) & (othrprobs>0.8)
-        combprobs = 1e-3 * np.ones(len(s0['probs']))
+        combprobs = 1e-3 * numpy.ones(len(s0['probs']))
         combprobs[ii] = 1.
         return combprobs
 
