@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 import h5py, argparse, logging, numpy, numpy.random
 from pycbc import events, detector
-from pycbc.events import veto, coinc, stat
+from pycbc.events import veto, coinc, stat, triggers
 import pycbc.version
+import pycbc.pnutils
 from numpy.random import seed, shuffle
 
 parser = argparse.ArgumentParser()
@@ -50,6 +51,8 @@ parser.add_argument("--randomize-template-order", action="store_true",
                          "before selecting range to analyze")
 parser.add_argument("--batch-singles", default=5000, type=int,
                     help="Number of single triggers to process at once")
+parser.add_argument("--restrict-mass-range-above", type=float, default=None,
+                    help="Limit the coinc search to only the triggers with chirpmass above a certain value")
 args = parser.parse_args()
 
 # flatten the list of lists of filenames to a single list (may be empty)
@@ -245,6 +248,13 @@ else:
     template_ids = range(tmin, tmax)
 
 for tnum in template_ids:
+    ##### MLStat change #####
+    if args.restrict_mass_range_above:
+        m1, m2, _, _ = triggers.get_mass_spin(args.template_bank, tnum)
+        mc, _ = pycbc.pnutils.mass1_mass2_to_mchirp_eta(m1, m2)
+        if mc < args.restrict_mass_range_above:
+            continue
+
     tid0g = trigs0.set_template(tnum)
     tid1g = trigs1.set_template(tnum)
 
