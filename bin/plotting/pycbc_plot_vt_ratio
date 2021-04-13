@@ -100,7 +100,7 @@ ax_mi.get_legend().get_frame().set_alpha(0.7)
 ax_mi.set_xlabel(x_param)
 ax_mi.set_ylabel(r'$\frac{VT(\mathrm{' + args.desc_one +'})}{VT(\mathrm{' + args.desc_two +'})}$')
 if args.title:
-    ax_mi.set_title(args.title)
+    ax_mi.set_title(args.title, y=1.0, pad=-14)
 plt.tight_layout()
 
 # write out to file, save as pdf if requested
