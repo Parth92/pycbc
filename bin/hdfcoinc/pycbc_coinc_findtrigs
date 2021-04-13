@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import h5py, argparse, logging, numpy, numpy.random
 from pycbc import events, detector
-from pycbc.events import veto, coinc, stat, triggers
+from pycbc.events import veto, coinc, stat
 import pycbc.version
 import pycbc.pnutils
 from numpy.random import seed, shuffle
@@ -250,21 +250,20 @@ else:
     template_ids = range(tmin, tmax)
 
 for tnum in template_ids:
+
+    tid0g = trigs0.set_template(tnum)
+    tid1g = trigs1.set_template(tnum)
+    
     ##### MLStat change #####
     if args.restrict_mass_range_above:
-        m1, m2, _, _ = triggers.get_mass_spin(args.template_bank, tnum)
-        mc, _ = pycbc.pnutils.mass1_mass2_to_mchirp_eta(m1, m2)
+        mc, _ = pycbc.pnutils.mass1_mass2_to_mchirp_eta(trigs0.param['mass1'], trigs0.param['mass2'])
         if mc < args.restrict_mass_range_above:
             continue
 
     if args.restrict_mass_range_below:
-        m1, m2, _, _ = triggers.get_mass_spin(args.template_bank, tnum)
-        mc, _ = pycbc.pnutils.mass1_mass2_to_mchirp_eta(m1, m2)
+        mc, _ = pycbc.pnutils.mass1_mass2_to_mchirp_eta(trigs0.param['mass1'], trigs0.param['mass2'])
         if mc >= args.restrict_mass_range_below:
             continue
-
-    tid0g = trigs0.set_template(tnum)
-    tid1g = trigs1.set_template(tnum)
 
     if (len(tid0g) == 0) or (len(tid1g) == 0):
         continue
