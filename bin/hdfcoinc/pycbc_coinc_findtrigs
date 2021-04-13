@@ -53,6 +53,8 @@ parser.add_argument("--batch-singles", default=5000, type=int,
                     help="Number of single triggers to process at once")
 parser.add_argument("--restrict-mass-range-above", type=float, default=None,
                     help="Limit the coinc search to only the triggers with chirpmass above a certain value")
+parser.add_argument("--restrict-mass-range-below", type=float, default=None,
+                    help="Limit the coinc search to only the triggers with chirpmass below a certain value")
 args = parser.parse_args()
 
 # flatten the list of lists of filenames to a single list (may be empty)
@@ -253,6 +255,12 @@ for tnum in template_ids:
         m1, m2, _, _ = triggers.get_mass_spin(args.template_bank, tnum)
         mc, _ = pycbc.pnutils.mass1_mass2_to_mchirp_eta(m1, m2)
         if mc < args.restrict_mass_range_above:
+            continue
+
+    if args.restrict_mass_range_below:
+        m1, m2, _, _ = triggers.get_mass_spin(args.template_bank, tnum)
+        mc, _ = pycbc.pnutils.mass1_mass2_to_mchirp_eta(m1, m2)
+        if mc >= args.restrict_mass_range_below:
             continue
 
     tid0g = trigs0.set_template(tnum)
