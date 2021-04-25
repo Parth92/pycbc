@@ -55,6 +55,8 @@ parser.add_argument("--restrict-mass-range-above", type=float, default=None,
                     help="Limit the coinc search to only the triggers with chirpmass above a certain value")
 parser.add_argument("--restrict-mass-range-below", type=float, default=None,
                     help="Limit the coinc search to only the triggers with chirpmass below a certain value")
+parser.add_argument('--restrict-mass-range-to-training', action='store_true', default=None,
+                    help='Limit the coinc search to only the triggers lying within training range (2 <= m1,m2 <= 98 & Mtot <= 100), [default=None]')
 args = parser.parse_args()
 
 # flatten the list of lists of filenames to a single list (may be empty)
@@ -263,6 +265,11 @@ for tnum in template_ids:
     if args.restrict_mass_range_below:
         mc, _ = pycbc.pnutils.mass1_mass2_to_mchirp_eta(trigs0.param['mass1'], trigs0.param['mass2'])
         if mc >= args.restrict_mass_range_below:
+            continue
+
+    if args.restrict_mass_range_to_training:
+        train_mass_range_criterion = (trigs0.param['mass1']>=2) & (trigs0.param['mass2']>=2) & (trigs0.param['mass1']<=98) & (trigs0.param['mass2']<=98) & (trigs0.param['mass1']+trigs0.param['mass2']<=100)
+        if not train_mass_range_criterion:
             continue
 
     if (len(tid0g) == 0) or (len(tid1g) == 0):
