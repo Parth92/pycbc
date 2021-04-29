@@ -1016,8 +1016,7 @@ class MLStatistic_PhTDExpFitSGStat(PhaseTDExpFitSGStatistic):
 
 class MLStatistic_PhTDExpFitSGStat_custom(PhaseTDExpFitSGStatistic):
 
-    """MLStat on top of the statistic combining exponential noise model with signal histogram PDF
-       and adding the sine-Gaussian veto to the single detector ranking
+    """custom combinations of Pcbc values for MLStat
     """
 
     def __init__(self, files):
@@ -1064,8 +1063,7 @@ class MLStatistic_PhTDExpFitSGStat_custom(PhaseTDExpFitSGStatistic):
 
 class MLStatistic_PhTDExpFitSGStat_MCdep(PhaseTDExpFitSGStatistic):
 
-    """MLStat on top of the statistic combining exponential noise model with signal histogram PDF
-       and adding the sine-Gaussian veto to the single detector ranking
+    """Mass dependent MLStat
     """
 
     def __init__(self, files):
@@ -1080,9 +1078,10 @@ class MLStatistic_PhTDExpFitSGStat_MCdep(PhaseTDExpFitSGStatistic):
     def coinc(self, s0, s1, slide, step, params=None):
         if not params:
             raise ValueError('tempate params are necessary for this stat')
-        mchirp = pycbc.conversions.mchirp_from_mass1_mass2(params['mass1'], params['mass2'])
+
+        train_mass_range_criterion = (params['mass1']>=2) & (params['mass2']>=2) & (params['mass1']<=98) & (params['mass2']<=98) & (params['mass1']+params['mass2']<=100)
         rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
-        if mchirp < 15.:
+        if not train_mass_range_criterion:
             return rstat
         else:
             cstat = rstat**2. + 2. * numpy.log(MLStatistic_PhTDExpFitSGStat_MCdep.coinc_prob(self, s0, s1))
