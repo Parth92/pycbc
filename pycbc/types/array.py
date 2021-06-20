@@ -41,14 +41,13 @@ from numpy.linalg import norm
 
 import pycbc.scheme as _scheme
 from pycbc.scheme import schemed, cpuonly
-from pycbc.types.aligned import ArrayWithAligned
 from pycbc.opt import LimitedSizeDict
 
 #! FIXME: the uint32 datatype has not been fully tested,
 # we should restrict any functions that do not allow an
 # array of uint32 integers
 _ALLOWED_DTYPES = [_numpy.float32, _numpy.float64, _numpy.complex64,
-                   _numpy.complex128, _numpy.uint32, _numpy.int32, _numpy.int]
+                   _numpy.complex128, _numpy.uint32, _numpy.int32, int]
 try:
     _ALLOWED_SCALARS = [int, long, float, complex] + _ALLOWED_DTYPES
 except NameError:
@@ -119,6 +118,19 @@ def _scheme_matches_base_array(array):
     err_msg += "scheme. You shouldn't be seeing this error!"
     raise ValueError(err_msg)
 
+def check_same_len_precision(a, b):
+    """Check that the two arguments have the same length and precision.
+    Raises ValueError if they do not.
+    """
+    if len(a) != len(b):
+        msg = 'lengths do not match ({} vs {})'.format(
+                len(a), len(b))
+        raise ValueError(msg)
+    if a.precision != b.precision:
+        msg = 'precisions do not match ({} vs {})'.format(
+                a.precision, b.precision)
+        raise TypeError(msg)
+
 class Array(object):
     """Array used to do numeric calculations on a various compute
     devices. It is a convience wrapper around numpy, and
@@ -149,11 +161,6 @@ class Array(object):
         if not copy:
             if not _scheme_matches_base_array(initial_array):
                 raise TypeError("Cannot avoid a copy of this array")
-            elif issubclass(type(self._scheme), _scheme.CPUScheme):
-                # ArrayWithAligned does not copy its memory; all 
-                # the following does is add the 'isaligned' flag
-                # in case initial_array was a true numpy array
-                self._data = ArrayWithAligned(initial_array)
             else:
                 self._data = initial_array
 
@@ -192,10 +199,9 @@ class Array(object):
             #Create new instance with initial_array as initialization.
             if issubclass(type(self._scheme), _scheme.CPUScheme):
                 if hasattr(initial_array, 'get'):
-                    self._data = ArrayWithAligned(_numpy.array(initial_array.get()))
+                    self._data = _numpy.array(initial_array.get())
                 else:
-                    self._data = ArrayWithAligned(_numpy.array(initial_array, 
-                                                               dtype=dtype, ndmin=1))
+                    self._data = _numpy.array(initial_array, dtype=dtype, ndmin=1)
             elif _scheme_matches_base_array(initial_array):
                 self._data = _copy_base_array(initial_array) # pylint:disable=assignment-from-no-return
             else:
@@ -208,6 +214,12 @@ class Array(object):
         if hasattr(ret, 'shape') and ret.shape == self.shape:
             ret = self._return(ret)
         return ret
+
+    def __array__(self, dtype=None):
+        arr = self.numpy()
+        if dtype is not None:
+            arr = arr.astype(dtype)
+        return arr
 
     @property
     def shape(self):
@@ -250,13 +262,9 @@ class Array(object):
                 other = force_precision_to_match(other, self.precision)
                 nargs +=(other,)
             elif isinstance(other, type(self)) or type(other) is Array:
-                if len(other) != len(self):
-                    raise ValueError('lengths do not match')
-                if other.precision == self.precision:
-                    _convert_to_scheme(other)
-                    nargs += (other._data,)
-                else:
-                    raise TypeError('precisions do not match')
+                check_same_len_precision(self, other)
+                _convert_to_scheme(other)
+                nargs += (other._data,)
             else:
                 return NotImplemented
 
@@ -268,30 +276,22 @@ class Array(object):
         for other in args:
             self._typecheck(other)  
             if isinstance(other, type(self)) or type(other) is Array:
-                if len(other) != len(self):
-                    raise ValueError('lengths do not match')
-                if other.precision == self.precision:
-                    _convert_to_scheme(other)
-                    nargs += (other._data,)
-                else:
-                    raise TypeError('precisions do not match')
+                check_same_len_precision(self, other)
+                _convert_to_scheme(other)
+                nargs += (other._data,)
             else:
                 raise TypeError('array argument required')                    
 
         return fn(self,*nargs) # pylint:disable=not-callable
         
     @decorator  
-    def _vrcheckother(fn, self,*args):
+    def _vrcheckother(fn, self, *args):
         nargs = ()
         for other in args:
             if isinstance(other, type(self)) or type(other) is Array:
-                if len(other) != len(self):
-                    raise ValueError('lengths do not match')
-                if other.precision == self.precision:
-                    _convert_to_scheme(other)
-                    nargs += (other._data,)
-                else:
-                    raise TypeError('precisions do not match')
+                check_same_len_precision(self, other)
+                _convert_to_scheme(other)
+                nargs += (other._data,)
             else:
                 raise TypeError('array argument required')                    
 
@@ -306,15 +306,11 @@ class Array(object):
                 raise TypeError('dtypes are incompatible')
             other = force_precision_to_match(other, self.precision)
         elif isinstance(other, type(self)) or type(other) is Array:
-            if len(other) != len(self):
-                raise ValueError('lengths do not match')
+            check_same_len_precision(self, other)
             if self.kind == 'real' and other.kind == 'complex':
                 raise TypeError('dtypes are incompatible')
-            if other.precision == self.precision:
-                _convert_to_scheme(other)
-                other = other._data
-            else:
-                raise TypeError('precisions do not match')
+            _convert_to_scheme(other)
+            other = other._data
         else:
             return NotImplemented
 
@@ -385,6 +381,12 @@ class Array(object):
     __div__ = __truediv__
     __idiv__ = __itruediv__
     __rdiv__ = __rtruediv__
+
+    @_returntype
+    @_convert
+    def __neg__(self):
+        """ Return negation of self """
+        return - self._data
 
     @_returntype
     @_convert
@@ -820,7 +822,6 @@ class Array(object):
     def roll(self, shift):
         """shift vector
         """
-        self._saved = LimitedSizeDict(size_limit=2**5)
         new_arr = zeros(len(self), dtype=self.dtype)
 
         if shift < 0:
@@ -831,7 +832,9 @@ class Array(object):
         
         new_arr[0:shift] = self[len(self)-shift: len(self)]
         new_arr[shift:len(self)] = self[0:len(self)-shift]
-            
+        
+        self._saved = LimitedSizeDict(size_limit=2**5)
+        
         self._data = new_arr._data
 
     @_returntype
@@ -996,9 +999,9 @@ class Array(object):
                 _numpy.savetxt(path, output)
         elif ext == '.hdf':
             key = 'data' if group is None else group
-            f = h5py.File(path)
-            f.create_dataset(key, data=self.numpy(), compression='gzip',
-                             compression_opts=9, shuffle=True)
+            with h5py.File(path, 'a') as f:
+                f.create_dataset(key, data=self.numpy(), compression='gzip',
+                                 compression_opts=9, shuffle=True)
         else:
             raise ValueError('Path must end with .npy, .txt, or .hdf')
            
@@ -1071,42 +1074,58 @@ def zeros(length, dtype=float64):
     err_msg += "the scheme. You shouldn't be seeing this error!"
     raise ValueError(err_msg)
 
-def load_array(path, group=None):
+@_return_array
+@schemed(BACKEND_PREFIX)
+def empty(length, dtype=float64):
+    """ Return an empty Array (no initialization)
     """
-    Load an Array from a .hdf, .txt or .npy file. The
-    default data types will be double precision floating point.
+    err_msg = "This function is a stub that should be overridden using "
+    err_msg += "the scheme. You shouldn't be seeing this error!"
+    raise ValueError(err_msg)
+
+def load_array(path, group=None):
+    """Load an Array from an HDF5, ASCII or Numpy file. The file type is
+    inferred from the file extension, which must be `.hdf`, `.txt` or `.npy`.
+
+    For ASCII and Numpy files with a single column, a real array is returned.
+    For files with two columns, the columns are assumed to contain the real
+    and imaginary parts of a complex array respectively.
+
+    The default data types will be double precision floating point.
 
     Parameters
     ----------
     path : string
-        source file path. Must end with either .npy or .txt.
+        Input file path. Must end with either `.npy`, `.txt` or `.hdf`.
 
-    group: string 
-        Additional name for internal storage use. Ex. hdf storage uses
-        this as the key value.
+    group: string
+        Additional name for internal storage use. When reading HDF files, this
+        is the path to the HDF dataset to read.
 
     Raises
     ------
     ValueError
-        If path does not end in .npy or .txt.
+        If path does not end with a supported extension. For Numpy and ASCII
+        input files, this is also raised if the array does not have 1 or 2
+        dimensions.
     """
     ext = _os.path.splitext(path)[1]
     if ext == '.npy':
-        data = _numpy.load(path)    
+        data = _numpy.load(path)
     elif ext == '.txt':
         data = _numpy.loadtxt(path)
     elif ext == '.hdf':
         key = 'data' if group is None else group
-        return Array(h5py.File(path)[key]) 
+        with h5py.File(path, 'r') as f:
+            array = Array(f[key])
+        return array
     else:
         raise ValueError('Path must end with .npy, .hdf, or .txt')
-        
+
     if data.ndim == 1:
         return Array(data)
     elif data.ndim == 2:
         return Array(data[:,0] + 1j*data[:,1])
-    else:
-        raise ValueError('File has %s dimensions, cannot convert to Array, \
-                          must be 1 (real) or 2 (complex)' % data.ndim)
-    
 
+    raise ValueError('File has %s dimensions, cannot convert to Array, \
+                      must be 1 (real) or 2 (complex)' % data.ndim)

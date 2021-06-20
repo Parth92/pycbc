@@ -25,11 +25,12 @@
 gravitational-wave detectors from public sources and/or dqsegdb.
 """
 
+import logging
 import json
 import numpy
-from astropy.utils.data import download_file
 from ligo.segments import segmentlist, segment
 from pycbc.frame.losc import get_run
+from pycbc.io import get_file
 
 
 def parse_veto_definer(veto_def_filename, ifos):
@@ -104,8 +105,27 @@ def parse_veto_definer(veto_def_filename, ifos):
 GWOSC_URL = 'https://www.gw-openscience.org/timeline/segments/json/{}/{}_{}/{}/{}/'
 
 
+def query_dqsegdb2(detector, flag_name, start_time, end_time, server):
+    """Utility function for better error reporting when calling dqsegdb2.
+    """
+    from dqsegdb2.query import query_segments
+
+    complete_flag = detector + ':' + flag_name
+    try:
+        query_res = query_segments(complete_flag,
+                                   int(start_time),
+                                   int(end_time),
+                                   host=server)
+        return query_res['active']
+    except Exception as e:
+        logging.error('Could not query segment database, check name '
+                      '(%s), times (%d-%d) and server (%s)',
+                      complete_flag, int(start_time), int(end_time),
+                      server)
+        raise e
+
 def query_flag(ifo, segment_name, start_time, end_time,
-               source='any', server="segments.ligo.org",
+               source='any', server="https://segments.ligo.org",
                veto_definer=None, cache=False):
     """Return the times where the flag is active
 
@@ -154,36 +174,25 @@ def query_flag(ifo, segment_name, start_time, end_time,
 
         duration = end_time - start_time
         try:
-            url = GWOSC_URL.format(get_run(start_time + duration/2),
+            url = GWOSC_URL.format(get_run(start_time + duration/2, ifo),
                                    ifo, segment_name,
                                    int(start_time), int(duration))
 
-            fname = download_file(url, cache=cache)
+            fname = get_file(url, cache=cache, timeout=10)
             data = json.load(open(fname, 'r'))
             if 'segments' in data:
                 flag_segments = data['segments']
 
         except Exception as e:
             if source != 'any':
-                print(e)
                 raise ValueError("Unable to find {} segments in GWOSC, check "
                                  "flag name or times".format(segment_name))
-            else:
-                print("Tried and failed to find {} in GWOSC, trying dqsegdb".
-                      format(segment_name))
 
             return query_flag(ifo, segment_name, start_time, end_time,
                               source='dqsegdb', server=server,
                               veto_definer=veto_definer)
 
     elif source == 'dqsegdb':
-        # Let's not hard require dqsegdb to be installed if we never get here.
-        try:
-            from dqsegdb2.query import query_segments as query
-        except ImportError:
-            raise ValueError("Could not query flag. Install dqsegdb2"
-                             ":'pip install dqsegdb2'")
-
         # The veto definer will allow the use of MACRO names
         # These directly correspond to the name in the veto definer file
         if veto_definer is not None:
@@ -194,9 +203,8 @@ def query_flag(ifo, segment_name, start_time, end_time,
         if veto_definer is not None and segment_name in veto_def[ifo]:
             for flag in veto_def[ifo][segment_name]:
                 partial = segmentlist([])
-                segs = query(ifo + ':' + flag['full_name'], int(start_time),
-                             int(end_time), host=server)['active']
-
+                segs = query_dqsegdb2(ifo, flag['full_name'],
+                                      start_time, end_time, server)
                 # Apply padding to each segment
                 for rseg in segs:
                     seg_start = rseg[0] + flag['start_pad']
@@ -214,16 +222,10 @@ def query_flag(ifo, segment_name, start_time, end_time,
                 flag_segments += (partial.coalesce() & send)
 
         else:  # Standard case just query directly
-            try:
-                segs = query(':'.join([ifo, segment_name]),
-                             int(start_time), int(end_time),
-                             host=server)['active']
-                for rseg in segs:
-                    flag_segments.append(segment(rseg[0], rseg[1]))
-            except Exception as e:
-                print("Could not query flag, check name "
-                      "(%s) or times" % segment_name)
-                raise e
+            segs = query_dqsegdb2(ifo, segment_name, start_time, end_time,
+                                  server)
+            for rseg in segs:
+                flag_segments.append(segment(rseg[0], rseg[1]))
 
         # dqsegdb output is not guaranteed to lie entirely within start
         # and end times, hence restrict to this range
@@ -231,14 +233,14 @@ def query_flag(ifo, segment_name, start_time, end_time,
             segmentlist([segment(int(start_time), int(end_time))])
 
     else:
-        raise ValueError("Source must be dqsegdb or GWOSC."
+        raise ValueError("Source must be `dqsegdb`, `GWOSC` or `any`."
                          " Got {}".format(source))
 
     return segmentlist(flag_segments).coalesce()
 
 
 def query_cumulative_flags(ifo, segment_names, start_time, end_time,
-                           source='any', server="segments.ligo.org",
+                           source='any', server="https://segments.ligo.org",
                            veto_definer=None,
                            bounds=None,
                            padding=None,
@@ -342,7 +344,7 @@ def parse_flag_str(flag_str):
         # Check if the flag should add or subtract time
         if not (flag[0] == '+' or flag[0] == '-'):
             err_msg = "DQ flags must begin with a '+' or a '-' character. "
-            err_msg += "You provided {}.".format(flag)
+            err_msg += "You provided {}. ".format(flag)
             err_msg += "See http://pycbc.org/pycbc/latest/html/workflow/segments.html"
             err_msg += " for more information."
             raise ValueError(err_msg)
@@ -383,7 +385,7 @@ def parse_flag_str(flag_str):
 
 
 def query_str(ifo, flag_str, start_time, end_time, source='any',
-              server="segments.ligo.org", veto_definer=None):
+              server="https://segments.ligo.org", veto_definer=None):
     """ Query for flags based on a special str syntax
 
     Parameters

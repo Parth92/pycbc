@@ -18,6 +18,7 @@ import logging, os.path
 from six.moves.urllib.request import pathname2url
 from six.moves.urllib.parse import urljoin
 import distutils.spawn
+from ligo import segments
 from pycbc.workflow.core import Executable, FileList, Node, makedir, File, Workflow
 from pycbc.workflow.plotting import PlotExecutable, requirestr, excludestr
 try:
@@ -86,13 +87,15 @@ def setup_foreground_minifollowups(workflow, coinc_file, single_triggers,
     config_file = wdax.File(os.path.basename(config_path))
     config_file.PFN(urljoin('file:', pathname2url(config_path)), site='local')
 
-    exe = Executable(workflow.cp, 'foreground_minifollowup', ifos=workflow.ifos, out_dir=dax_output, tags=tags)
+    exe = Executable(workflow.cp, 'foreground_minifollowup',
+                     ifos=workflow.ifos, out_dir=dax_output, tags=tags)
 
     node = exe.create_node()
     node.add_input_opt('--config-files', config_file)
     node.add_input_opt('--bank-file', tmpltbank_file)
     node.add_input_opt('--statmap-file', coinc_file)
-    node.add_multiifo_input_list_opt('--single-detector-triggers', single_triggers)
+    node.add_multiifo_input_list_opt('--single-detector-triggers',
+                                     single_triggers)
     node.add_input_opt('--inspiral-segments', insp_segs)
     node.add_opt('--inspiral-data-read-name', insp_data_name)
     node.add_opt('--inspiral-data-analyzed-name', insp_anal_name)
@@ -100,7 +103,8 @@ def setup_foreground_minifollowups(workflow, coinc_file, single_triggers,
         node.add_list_opt('--tags', tags)
     node.new_output_file_opt(workflow.analysis_time, '.dax', '--output-file')
     node.new_output_file_opt(workflow.analysis_time, '.dax.map', '--output-map')
-    node.new_output_file_opt(workflow.analysis_time, '.tc.txt', '--transformation-catalog')
+    node.new_output_file_opt(workflow.analysis_time, '.tc.txt',
+                             '--transformation-catalog')
 
     name = node.output_files[0].name
     map_file = node.output_files[1]
@@ -203,12 +207,16 @@ def setup_single_det_minifollowups(workflow, single_trig_file, tmpltbank_file,
         assert(veto_segment_name is not None)
         node.add_input_opt('--veto-file', veto_file)
         node.add_opt('--veto-segment-name', veto_segment_name)
-    if statfiles is not None:
+    if statfiles:
         statfiles = statfiles.find_output_with_ifo(curr_ifo)
         node.add_input_list_opt('--statistic-files', statfiles)
-    node.new_output_file_opt(workflow.analysis_time, '.dax', '--output-file', tags=tags)
-    node.new_output_file_opt(workflow.analysis_time, '.dax.map', '--output-map', tags=tags)
-    node.new_output_file_opt(workflow.analysis_time, '.tc.txt', '--transformation-catalog', tags=tags)
+    if tags:
+        node.add_list_opt('--tags', tags)
+    node.new_output_file_opt(workflow.analysis_time, '.dax', '--output-file')
+    node.new_output_file_opt(workflow.analysis_time, '.dax.map',
+                             '--output-map')
+    node.new_output_file_opt(workflow.analysis_time, '.tc.txt',
+                             '--transformation-catalog')
 
     name = node.output_files[0].name
     map_file = node.output_files[1]
@@ -232,7 +240,8 @@ def setup_single_det_minifollowups(workflow, single_trig_file, tmpltbank_file,
     job = dax.DAX(fil)
     job.addArguments('--basename %s' \
                      % os.path.splitext(os.path.basename(name))[0])
-    Workflow.set_job_properties(job, map_file, tc_file, staging_site=staging_site)
+    Workflow.set_job_properties(job, map_file, tc_file,
+                                staging_site=staging_site)
     workflow._adag.addJob(job)
     dep = dax.Dependency(parent=node._dax_node, child=job)
     workflow._adag.addDependency(dep)
@@ -300,6 +309,8 @@ def setup_injection_minifollowups(workflow, injection_file, inj_xml_file,
     node.add_input_opt('--inspiral-segments', insp_segs)
     node.add_opt('--inspiral-data-read-name', insp_data_name)
     node.add_opt('--inspiral-data-analyzed-name', insp_anal_name)
+    if tags:
+        node.add_list_opt('--tags', tags)
     node.new_output_file_opt(workflow.analysis_time, '.dax', '--output-file', tags=tags)
     node.new_output_file_opt(workflow.analysis_time, '.dax.map', '--output-map', tags=tags)
     node.new_output_file_opt(workflow.analysis_time, '.tc.txt', '--transformation-catalog', tags=tags)
@@ -338,6 +349,7 @@ class SingleTemplateExecutable(PlotExecutable):
     PlotExecutable but adds the file_input_options.
     """
     file_input_options = ['--gating-file']
+    time_dependent_options = ['--channel-name', '--frame-type']
 
 
 class SingleTimeFreqExecutable(PlotExecutable):
@@ -346,6 +358,8 @@ class SingleTimeFreqExecutable(PlotExecutable):
     PlotExecutable but adds the file_input_options.
     """
     file_input_options = ['--gating-file']
+    time_dependent_options = ['--channel-name', '--frame-type']
+
 
 class PlotQScanExecutable(PlotExecutable):
     """Class to be used for to create workflow.Executable instances for the
@@ -353,6 +367,7 @@ class PlotQScanExecutable(PlotExecutable):
     PlotExecutable but adds the file_input_options.
     """
     file_input_options = ['--gating-file']
+    time_dependent_options = ['--channel-name', '--frame-type']
 
 
 def make_single_template_plots(workflow, segs, data_read_name, analyzed_name,
@@ -423,9 +438,14 @@ def make_single_template_plots(workflow, segs, data_read_name, analyzed_name,
             if params['%s_end_time' % ifo] == -1.0:
                 continue
             # Reanalyze the time around the trigger in each detector
-            node = SingleTemplateExecutable(workflow.cp, 'single_template',
-                                            ifos=[ifo], out_dir=out_dir,
-                                            tags=[tag] + tags).create_node()
+            curr_exe = SingleTemplateExecutable(workflow.cp, 'single_template',
+                                                ifos=[ifo], out_dir=out_dir,
+                                                tags=[tag] + tags)
+            start = int(params[ifo + '_end_time'])
+            end = start + 1
+            cseg = segments.segment([start, end])
+            node = curr_exe.create_node(valid_seg=cseg)
+
             if use_exact_inj_params:
                 node.add_opt('--use-params-of-closest-injection')
             else:
@@ -535,7 +555,7 @@ def make_inj_info(workflow, injection_file, injection_index, num, out_dir,
 
 def make_coinc_info(workflow, singles, bank, coinc, out_dir,
                     n_loudest=None, trig_id=None, file_substring=None,
-                    tags=None):
+                    sort_order=None, sort_var=None, tags=None):
     tags = [] if tags is None else tags
     makedir(out_dir)
     name = 'page_coincinfo'
@@ -545,6 +565,10 @@ def make_coinc_info(workflow, singles, bank, coinc, out_dir,
     node.add_input_list_opt('--single-trigger-files', singles)
     node.add_input_opt('--statmap-file', coinc)
     node.add_input_opt('--bank-file', bank)
+    if sort_order:
+        node.add_opt('--sort-order', sort_order)
+    if sort_var:
+        node.add_opt('--sort-variable', sort_var)
     if n_loudest is not None:
         node.add_opt('--n-loudest', str(n_loudest))
     if trig_id is not None:
@@ -640,12 +664,13 @@ def make_qscan_plot(workflow, ifo, trig_time, out_dir, injection_file=None,
 
     curr_exe = PlotQScanExecutable(workflow.cp, name, ifos=[ifo],
                           out_dir=out_dir, tags=tags)
-    node = curr_exe.create_node()
 
     # Determine start/end times, using data segments if needed.
     # Begin by choosing "optimal" times
     start = trig_time - time_window
     end = trig_time + time_window
+    node = curr_exe.create_node(valid_seg=segments.segment([start, end]))
+
     # Then if data_segments is available, check against that, and move if
     # needed
     if data_segments is not None:
@@ -737,14 +762,16 @@ def make_singles_timefreq(workflow, single, bank_file, trig_time, out_dir,
 
     curr_exe = SingleTimeFreqExecutable(workflow.cp, name, ifos=[single.ifo],
                           out_dir=out_dir, tags=tags)
-    node = curr_exe.create_node()
-    node.add_input_opt('--trig-file', single)
-    node.add_input_opt('--bank-file', bank_file)
 
     # Determine start/end times, using data segments if needed.
     # Begin by choosing "optimal" times
     start = trig_time - time_window
     end = trig_time + time_window
+
+    node = curr_exe.create_node(valid_seg=segments.segment([start, end]))
+    node.add_input_opt('--trig-file', single)
+    node.add_input_opt('--bank-file', bank_file)
+
     # Then if data_segments is available, check against that, and move if
     # needed
     if data_segments is not None:

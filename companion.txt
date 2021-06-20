@@ -1,7 +1,15 @@
 # other tools which may be useful
 gwpy>=0.8.1
+
 # HEALPix is very useful for some analysis.
 healpy
-# Needed for gracedb uploads
-ligo-gracedb
 
+# Needed for gracedb uploads and skymap generation
+ligo-gracedb
+ligo.skymap; python_version >= '3.5'
+
+# auxiliary samplers
+cpnest; python_version >= '3.5'
+pymultinest
+ultranest
+https://github.com/willvousden/ptemcee/archive/master.tar.gz

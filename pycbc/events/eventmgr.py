@@ -27,6 +27,8 @@ produces event triggers
 from __future__ import absolute_import
 import numpy, copy, os.path
 import logging
+import h5py
+from six.moves import cPickle
 
 from pycbc.types import Array
 from pycbc.scheme import schemed
@@ -190,6 +192,32 @@ class EventManager(object):
         self.template_events = numpy.array([], dtype=self.event_dtype)
         self.write_performance = False
 
+    def save_state(self, tnum_finished, filename):
+        """Save the current state of the background buffers"""
+        from pycbc.io.hdf import dump_state
+
+        self.tnum_finished = tnum_finished
+        logging.info('Writing checkpoint file at template %s', tnum_finished)
+        fp = h5py.File(filename, 'w')
+        dump_state(self, fp, protocol=cPickle.HIGHEST_PROTOCOL)
+        fp.close()
+
+    @staticmethod
+    def restore_state(filename):
+        """Restore state of the background buffers from a file"""
+        from pycbc.io.hdf import load_state
+
+        fp = h5py.File(filename, 'r')
+        try:
+            mgr = load_state(fp)
+        except Exception as e:
+            fp.close()
+            raise e
+        fp.close()
+        next_template = mgr.tnum_finished + 1
+        logging.info('Restoring with checkpoint at template %s', next_template)
+        return mgr.tnum_finished + 1, mgr
+
     @classmethod
     def from_multi_ifo_interface(cls, opt, ifo, column, column_types, **kwds):
         """
@@ -241,7 +269,6 @@ class EventManager(object):
         if len(self.events) == 0:
             return
 
-        from pycbc.events import stat
         e_copy = self.events.copy()
 
         # Here self.events['snr'] is the complex SNR
@@ -249,9 +276,7 @@ class EventManager(object):
         # Messy step because pycbc inspiral's internal 'chisq_dof' is 2p-2
         # but stat.py / ranking.py functions use 'chisq_dof' = p
         e_copy['chisq_dof'] = e_copy['chisq_dof'] / 2 + 1
-        # Initialize statclass with an empty file list
-        stat_instance = stat.sngl_statistic_dict[statname]([])
-        statv = stat_instance.single(e_copy)
+        statv = ranking.get_sngls_ranking_from_trigs(e_copy, statname)
 
         # Convert trigger time to integer bin number
         # NB time_index and window are in units of samples
@@ -393,7 +418,6 @@ class EventManager(object):
     def write_to_hdf(self, outname):
         class fw(object):
             def __init__(self, name, prefix):
-                import h5py
                 self.f = h5py.File(name, 'w')
                 self.prefix = prefix
 
@@ -635,7 +659,6 @@ class EventManagerCoherent(EventManagerMultiDetBase):
     def write_to_hdf(self, outname):
         class fw(object):
             def __init__(self, name):
-                import h5py
                 self.f = h5py.File(name, 'w')
 
             def __setitem__(self, name, data):
@@ -930,7 +953,6 @@ class EventManagerMultiDet(EventManagerMultiDetBase):
     def write_to_hdf(self, outname):
         class fw(object):
             def __init__(self, name):
-                import h5py
                 self.f = h5py.File(name, 'w')
 
             def __setitem__(self, name, data):

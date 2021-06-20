@@ -21,11 +21,14 @@ assuming various noise models.
 
 
 from .analytic import (TestEggbox, TestNormal, TestRosenbrock, TestVolcano,
-                       TestPrior)
+                       TestPrior, TestPosterior)
 from .gaussian_noise import GaussianNoise
-from .marginalized_gaussian_noise import (MarginalizedPhaseGaussianNoise,
-                                          MarginalizedGaussianNoise)
+from .marginalized_gaussian_noise import MarginalizedPhaseGaussianNoise
+from .marginalized_gaussian_noise import MarginalizedPolarization
+from .marginalized_gaussian_noise import MarginalizedHMPolPhase
+from .brute_marg import BruteParallelGaussianMarginalize
 from .single_template import SingleTemplate
+from .relbin import Relative
 
 
 # Used to manage a model instance across multiple cores or MPI
@@ -44,7 +47,7 @@ def _call_global_model_logprior(*args, **kwds):
     like ``emcee_pt``.
     """
     # pylint:disable=not-callable
-    return _global_instance(*args, callstat='logprior', **kwds)  
+    return _global_instance(*args, callstat='logprior', **kwds)
 
 
 class CallModel(object):
@@ -179,9 +182,13 @@ models = {_cls.name: _cls for _cls in (
     TestNormal,
     TestRosenbrock,
     TestVolcano,
+    TestPosterior,
     TestPrior,
     GaussianNoise,
     MarginalizedPhaseGaussianNoise,
-    MarginalizedGaussianNoise,
-    SingleTemplate
+    MarginalizedPolarization,
+    MarginalizedHMPolPhase,
+    BruteParallelGaussianMarginalize,
+    SingleTemplate,
+    Relative
 )}

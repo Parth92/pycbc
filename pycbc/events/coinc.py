@@ -25,7 +25,7 @@
 coincident triggers.
 """
 
-import h5py, numpy, logging, pycbc.pnutils, copy, lal
+import numpy, logging, pycbc.pnutils, copy, lal
 from pycbc.detector import Detector
 
 
@@ -428,7 +428,7 @@ def cluster_coincs_multiifo(stat, time_coincs, timeslide_id, slide, window, argm
     cindex: numpy.ndarray
         The set of indices corresponding to the surviving coincidences
     """
-    time_coinc_zip = zip(*time_coincs)
+    time_coinc_zip = list(zip(*time_coincs))
     if len(time_coinc_zip) == 0:
         logging.info('No coincident triggers.')
         return numpy.array([])
@@ -692,7 +692,7 @@ class CoincExpireBuffer(object):
             newlen = len(self.buffer) * 2
             for ifo in self.ifos:
                 self.timer[ifo].resize(newlen)
-            self.buffer.resize(newlen)
+            self.buffer.resize(newlen, refcheck=False)
 
         self.buffer[self.index:self.index+len(values)] = values
         if len(values) > 0:
@@ -726,11 +726,12 @@ class LiveCoincTimeslideBackgroundEstimator(object):
     """Rolling buffer background estimation."""
 
     def __init__(self, num_templates, analysis_block, background_statistic,
-                 stat_files, ifos,
+                 sngl_ranking, stat_files, ifos,
                  ifar_limit=100,
                  timeslide_interval=.035,
                  coinc_threshold=.002,
-                 return_background=False):
+                 return_background=False,
+                 **kwargs):
         """
         Parameters
         ----------
@@ -740,6 +741,8 @@ class LiveCoincTimeslideBackgroundEstimator(object):
             The number of seconds in each analysis segment
         background_statistic: str
             The name of the statistic to rank coincident events.
+        sngl_ranking: str
+            The single detector ranking to use with the background statistic
         stat_files: list of strs
             List of filenames that contain information used to construct
             various coincident statistics.
@@ -757,22 +760,21 @@ class LiveCoincTimeslideBackgroundEstimator(object):
         return_background: boolean
             If true, background triggers will also be included in the file
             output.
+        kwargs: dict
+            Additional options for the statistic to use. See stat.py
+            for more details on statistic options.
         """
         from . import stat
         self.num_templates = num_templates
         self.analysis_block = analysis_block
 
-        # Only pass a valid stat file for this ifo pair
-        for fname in stat_files:
-            f = h5py.File(fname, 'r')
-            ifos_set = set([f.attrs['ifo0'], f.attrs['ifo1']])
-            f.close()
-            if ifos_set == set(ifos):
-                stat_files = [fname]
-                logging.info('Setup ifos %s-%s with file %s and stat %s',
-                             ifos[0], ifos[1], fname, background_statistic)
-
-        self.stat_calculator = stat.get_statistic(background_statistic)(stat_files)
+        stat_class = stat.get_statistic(background_statistic)
+        self.stat_calculator = stat_class(
+            sngl_ranking,
+            stat_files,
+            ifos=ifos,
+            **kwargs
+        )
 
         self.timeslide_interval = timeslide_interval
         self.return_background = return_background
@@ -847,25 +849,34 @@ class LiveCoincTimeslideBackgroundEstimator(object):
 
     @classmethod
     def from_cli(cls, args, num_templates, analysis_chunk, ifos):
+        from . import stat
+
+        # Allow None inputs
+        stat_files = args.statistic_files or []
+        stat_keywords = args.statistic_keywords or []
+
+        # flatten the list of lists of filenames to a single list (may be empty)
+        stat_files = sum(stat_files, [])
+
+        kwargs = stat.parse_statistic_keywords_opt(stat_keywords)
+
         return cls(num_templates, analysis_chunk,
-                   args.background_statistic,
-                   args.background_statistic_files,
+                   args.ranking_statistic,
+                   args.sngl_ranking,
+                   stat_files,
                    return_background=args.store_background,
                    ifar_limit=args.background_ifar_limit,
                    timeslide_interval=args.timeslide_interval,
-                   ifos=ifos)
+                   ifos=ifos,
+                   **kwargs)
 
     @staticmethod
     def insert_args(parser):
         from . import stat
 
+        stat.insert_statistic_option_group(parser)
+
         group = parser.add_argument_group('Coincident Background Estimation')
-        group.add_argument('--background-statistic', default='newsnr',
-            choices=sorted(stat.statistic_dict.keys()),
-            help="Ranking statistic to use for candidate coincident events")
-        group.add_argument('--background-statistic-files', nargs='+',
-            help="Files containing precalculate values to calculate ranking"
-                 " statistic values", default=[])
         group.add_argument('--store-background', action='store_true',
             help="Return background triggers with zerolag coincidencs")
         group.add_argument('--background-ifar-limit', type=float,
@@ -916,7 +927,8 @@ class LiveCoincTimeslideBackgroundEstimator(object):
         self.singles_dtype = []
         data = False
         for ifo in self.ifos:
-            if ifo in results and results[ifo] is not False:
+            if ifo in results and results[ifo] is not False \
+                    and len(results[ifo]['snr']):
                 data = results[ifo]
                 break
 
@@ -953,6 +965,9 @@ class LiveCoincTimeslideBackgroundEstimator(object):
         """
         if len(self.singles.keys()) == 0:
             self.set_singles_buffer(results)
+        # If this *still* didn't work, no triggers in first set, try next time
+        if len(self.singles.keys()) == 0:
+            return {}
 
         # convert to single detector trigger values
         # FIXME Currently configured to use pycbc live output
@@ -1027,8 +1042,15 @@ class LiveCoincTimeslideBackgroundEstimator(object):
                                  self.time_window,
                                  self.timeslide_interval)
                 trig_stat = numpy.resize(trig_stat, len(i1))
-                c = self.stat_calculator.coinc(stats[i1], trig_stat,
-                                               slide, self.timeslide_interval)
+                sngls_list = [[ifo, trig_stat],
+                              [oifo, stats[i1]]]
+                # This can only use 2-det coincs at present
+                c = self.stat_calculator.rank_stat_coinc(
+                    sngls_list,
+                    slide,
+                    self.timeslide_interval,
+                    [0, -1]
+                )
                 offsets.append(slide)
                 cstat.append(c)
                 ctimes[oifo].append(times[i1])
@@ -1128,7 +1150,7 @@ class LiveCoincTimeslideBackgroundEstimator(object):
         self.coincs.remove(num_coincs)
 
     def add_singles(self, results):
-        """Add singles to the bacckground estimate and find candidates
+        """Add singles to the background estimate and find candidates
 
         Parameters
         ----------

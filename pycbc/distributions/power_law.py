@@ -134,7 +134,7 @@ class UniformPowerLaw(bounded.BoundedDist):
             self._norm *= self.dim  / \
                                    (self._bounds[p][1]**(self.dim) -
                                     self._bounds[p][0]**(self.dim))
-            self._lognorm = numpy.log(self._norm)
+        self._lognorm = numpy.log(self._norm)
 
     @property
     def norm(self):
@@ -176,7 +176,7 @@ class UniformPowerLaw(bounded.BoundedDist):
             arr[p] = numpy.power(factor * arr[p] + offset, 1.0 / self.dim)
         return arr
 
-    def cdfinv(self, param, value):
+    def _cdfinv_param(self, param, value):
         """Return inverse of cdf to map unit interval to parameter bounds.
         """
         n = self.dim - 1

@@ -53,7 +53,8 @@ class Uniform(bounded.BoundedDist):
     --------
     Create a 2 dimensional uniform distribution:
 
-    >>> dist = prior.Uniform(mass1=(10.,50.), mass2=(10.,50.))
+    >>> from pycbc import distributions
+    >>> dist = distributions.Uniform(mass1=(10.,50.), mass2=(10.,50.))
 
     Get the log of the pdf at a particular value:
 
@@ -109,13 +110,12 @@ class Uniform(bounded.BoundedDist):
     def lognorm(self):
         return self._lognorm
 
-    def cdfinv(self, param, value):
+    def _cdfinv_param(self, param, value):
         """Return the inverse cdf to map the unit interval to parameter bounds.
         """
         lower_bound = self._bounds[param][0]
         upper_bound = self._bounds[param][1]
-        new_value = (upper_bound - lower_bound) * value + lower_bound
-        return new_value
+        return (upper_bound - lower_bound) * value + lower_bound
 
     def _pdf(self, **kwargs):
         """Returns the pdf at the given values. The keyword arguments must

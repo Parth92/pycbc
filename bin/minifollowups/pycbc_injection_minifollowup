@@ -19,7 +19,7 @@
 import os, argparse, numpy, logging, h5py, copy
 import pycbc.workflow as wf
 from pycbc.types import MultiDetOptionAction
-from pycbc.events import select_segments_by_definer
+from pycbc.events import select_segments_by_definer, coinc
 from pycbc.results import layout
 from pycbc.detector import Detector
 import pycbc.workflow.minifollowups as mini
@@ -61,6 +61,9 @@ parser.add_argument('--inj-window', type=int, default=0.5,
 parser.add_argument('--ifar-threshold', type=float, default=None,
                     help="If given also followup injections with ifar smaller "
                          "than this threshold.")
+parser.add_argument('--maximum-decisive-snr', type=float, default=None,
+                    help="If given, only followup injections where the "
+                         "decisive SNR is smaller than this value.")
 parser.add_argument('--output-map')
 parser.add_argument('--output-file')
 parser.add_argument('--transformation-catalog')
@@ -85,16 +88,21 @@ insp_segs = to_file(args.inspiral_segments)
 
 single_triggers = []
 insp_data_seglists = {}
+insp_analysed_seglists = {}
 for ifo in args.single_detector_triggers:
     fname = args.single_detector_triggers[ifo]
     single_triggers.append(to_file(fname, ifo=ifo))
     insp_data_seglists[ifo] = select_segments_by_definer\
         (args.inspiral_segments, segment_name=args.inspiral_data_read_name,
          ifo=ifo)
+    insp_analysed_seglists[ifo] = select_segments_by_definer\
+        (args.inspiral_segments, segment_name=args.inspiral_data_analyzed_name,
+         ifo=ifo)
     # NOTE: make_singles_timefreq needs a coalesced set of segments. If this is
     #       being used to determine command-line options for other codes,
     #       please think if that code requires coalesced, or not, segments.
     insp_data_seglists[ifo].coalesce()
+    insp_analysed_seglists[ifo].coalesce()
 
 f = h5py.File(args.injection_file, 'r')
 missed = f['missed/after_vetoes'][:]
@@ -111,51 +119,62 @@ if args.ifar_threshold is not None:
 num_events = int(workflow.cp.get_opt_tags('workflow-injection_minifollowups', 'num-events', ''))
 
 try:
-    optimal_snr =[f['injections/optimal_snr_1'][:][missed],
-                  f['injections/optimal_snr_2'][:][missed]]
-    dec_snr = numpy.minimum(optimal_snr[0], optimal_snr[1])
+    optstrings = [os for os in f['injections'].keys() if \
+                  os.startswith('optimal_snr_')]
+    optimal_snr = [f['injections/%s' % os][:][missed] for os in optstrings]
+    # 2nd largest opt SNR
+    dec_snr = [sorted(snrs)[-2] for snrs in zip(*optimal_snr)]
+    dec_snr = numpy.array(dec_snr)
+
+    if args.maximum_decisive_snr is not None:
+        # By setting to 0, these injections will not be considered
+        dec_snr[dec_snr > args.maximum_decisive_snr] = 0
     sorting = dec_snr.argsort()
-    sorting = sorting[::-1]
-except:
+    sorting = sorting[::-1]  # descending order of dec opt SNR
+except KeyError:
     # Fall back to effective distance if optimal SNR not available
-    eff_dist = {'H1': f['injections/eff_dist_h'][:][missed],
-               'L1': f['injections/eff_dist_l'][:][missed],
-               'V1': f['injections/eff_dist_v'][:][missed],
-               }
+    eff_dist = {}
+    for trig in single_triggers:
+        ifo = trig.ifo
+        eff_dist[ifo] = Detector(ifo).effective_distance(
+                             f['injections/distance'][:][missed],
+                             f['injections/ra'][:][missed],
+                             f['injections/dec'][:][missed],
+                             f['injections/polarization'][:][missed],
+                             f['injections/tc'][:][missed],
+                             f['injections/inclination'][:][missed])
+
     dec_dist = numpy.maximum(eff_dist[single_triggers[0].ifo],
                              eff_dist[single_triggers[1].ifo])
-
     mchirp, eta = pycbc.pnutils.mass1_mass2_to_mchirp_eta(\
                                               f['injections/mass1'][:][missed],
                                               f['injections/mass2'][:][missed])
-
     dec_chirp_dist = pycbc.pnutils.chirp_distance(dec_dist, mchirp)
-
-    sorting = dec_chirp_dist.argsort()
+    sorting = dec_chirp_dist.argsort()  # ascending order of dec chirp distance
 
 if len(missed) < num_events:
     num_events = len(missed)
 
-# loop over number of loudest events to be followed up
+# loop over loudest events to be followed up
 found_inj_idxes = f['found_after_vetoes/injection_index'][:]
 for num_event in range(num_events):
     files = wf.FileList([])
 
     injection_index = missed[sorting][num_event]
-    time = f['injections/end_time'][injection_index]
+    time = f['injections/tc'][injection_index]
+    lon = f['injections/ra'][injection_index]
+    lat = f['injections/dec'][injection_index]
 
     ifo_times = ''
     inj_params = {}
-    for val in ['mass1', 'mass2', 'spin1z', 'spin2z', 'end_time']:
+    for val in ['mass1', 'mass2', 'spin1z', 'spin2z', 'tc']:
         inj_params[val] = f['injections/%s' %(val,)][injection_index]
     for single in single_triggers:
         ifo = single.ifo
-        for seg in insp_data_seglists[single.ifo]:
-            if time in seg:
-                det = Detector(ifo)
-                lon = f['injections/longitude'][injection_index]
-                lat = f['injections/latitude'][injection_index]
-                ifo_time = time + det.time_delay_from_earth_center(lon, lat, time)
+        det = Detector(ifo)
+        ifo_time = time + det.time_delay_from_earth_center(lon, lat, time)
+        for seg in insp_analysed_seglists[ifo]:
+            if ifo_time in seg:
                 break
         else:
             ifo_time = -1.0
@@ -179,18 +198,24 @@ for num_event in range(num_events):
     for single in single_triggers:
         checkedtime = time
         if (inj_params[single.ifo + '_end_time'] == -1.0):
-            checkedtime = -1.0
-
-        files += mini.make_singles_timefreq(workflow, single, tmpltbank_file,
+            all_times = [inj_params[sngl.ifo + '_end_time'] for sngl in single_triggers]
+            checkedtime = coinc.mean_if_greater_than_zero(all_times)[0]
+        for seg in insp_analysed_seglists[single.ifo]:
+            if checkedtime in seg:
+                files += mini.make_singles_timefreq(workflow, single, tmpltbank_file,
                                 checkedtime, args.output_dir,
                                 data_segments=insp_data_seglists[single.ifo],
                                 tags=args.tags + [str(num_event)])
-
-        files += mini.make_qscan_plot\
-            (workflow, single.ifo, checkedtime, args.output_dir,
-             data_segments=insp_data_seglists[single.ifo],
-             injection_file=injection_xml_file,
-             tags=args.tags + [str(num_event)])
+                files += mini.make_qscan_plot\
+                    (workflow, single.ifo, checkedtime, args.output_dir,
+                     data_segments=insp_data_seglists[single.ifo],
+                     injection_file=injection_xml_file,
+                     tags=args.tags + [str(num_event)])
+                break
+        else:
+            logging.info('Trigger time {} is not valid in {}, ' \
+                         'skipping singles plots'.format(checkedtime,
+                                                         single.ifo))
 
     files += mini.make_single_template_plots(workflow, insp_segs,
                             args.inspiral_data_read_name,
@@ -228,7 +253,7 @@ for num_event in range(num_events):
         end_times = hd_sngl.end_time
         # Use SNR here or NewSNR??
         snr = hd_sngl.snr
-        lgc_mask = abs(end_times - inj_params['end_time']) < args.inj_window
+        lgc_mask = abs(end_times - inj_params['tc']) < args.inj_window
 
         if len(snr[lgc_mask]) == 0:
             continue

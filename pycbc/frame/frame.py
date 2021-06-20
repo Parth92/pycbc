@@ -20,8 +20,11 @@ This modules contains functions for reading in data from frame files or caches
 import lalframe, logging
 import lal
 import numpy
+import math
 import os.path, glob, time
-import glue.datafind
+import gwdatafind
+import pycbc
+from six.moves.urllib.parse import urlparse
 from pycbc.types import TimeSeries, zeros
 
 
@@ -190,6 +193,12 @@ def read_frame(location, channels, start_time=None,
     if sieve:
         logging.info("Using frames that match regexp: %s", sieve)
         lal.CacheSieve(cum_cache, 0, 0, None, None, sieve)
+    if start_time is not None and end_time is not None:
+        # Before sieving, check if this is sane. Otherwise it will fail later.
+        if (int(math.ceil(end_time)) - int(start_time)) <= 0:
+            raise ValueError("Negative or null duration")
+        lal.CacheSieve(cum_cache, int(start_time), int(math.ceil(end_time)),
+                       None, None, None)
 
     stream = lalframe.FrStreamCacheOpen(cum_cache)
     stream.mode = lalframe.FR_STREAM_VERBOSE_MODE
@@ -259,38 +268,7 @@ def datafind_connection(server=None):
     connection
         The open connection to the datafind server.
     """
-
-    if server:
-        datafind_server = server
-    else:
-        # Get the server name from the environment
-        if 'LIGO_DATAFIND_SERVER' in os.environ:
-            datafind_server = os.environ["LIGO_DATAFIND_SERVER"]
-        else:
-            err = "Trying to obtain the ligo datafind server url from "
-            err += "the environment, ${LIGO_DATAFIND_SERVER}, but that "
-            err += "variable is not populated."
-            raise ValueError(err)
-
-    # verify authentication options
-    if not datafind_server.endswith("80"):
-        cert_file, key_file = glue.datafind.find_credential()
-    else:
-        cert_file, key_file = None, None
-
-    # Is a port specified in the server URL
-    dfs_fields = datafind_server.split(':', 1)
-    server = dfs_fields[0]
-    port = int(dfs_fields[1]) if len(dfs_fields) == 2 else None
-
-    # Open connection to the datafind server
-    if cert_file and key_file:
-        connection = glue.datafind.GWDataFindHTTPSConnection(
-                host=server, port=port, cert_file=cert_file, key_file=key_file)
-    else:
-        connection = glue.datafind.GWDataFindHTTPConnection(
-                host=server, port=port)
-    return connection
+    return gwdatafind.connect(host=server)
 
 def frame_paths(frame_type, start_time, end_time, server=None, url_type='file'):
     """Return the paths to a span of frame files
@@ -324,8 +302,7 @@ def frame_paths(frame_type, start_time, end_time, server=None, url_type='file'):
     connection.find_times(site, frame_type,
                           gpsstart=start_time, gpsend=end_time)
     cache = connection.find_frame_urls(site, frame_type, start_time, end_time,urltype=url_type)
-    paths = [entry.path for entry in cache]
-    return paths
+    return [urlparse(entry).path for entry in cache]
 
 def query_and_read_frame(frame_type, channels, start_time, end_time,
                          sieve=None, check_integrity=False):
@@ -365,6 +342,13 @@ def query_and_read_frame(frame_type, channels, start_time, end_time,
     """
     # Allows compatibility with our standard tools
     # We may want to place this into a higher level frame getting tool
+    if frame_type == 'LOSC_STRAIN':
+        from pycbc.frame.losc import read_strain_losc
+        if not isinstance(channels, list):
+            channels = [channels]
+        data = [read_strain_losc(c[:2], start_time, end_time)
+                for c in channels]
+        return data if len(data) > 1 else data[0]
     if frame_type == 'LOSC':
         from pycbc.frame.losc import read_frame_losc
         return read_frame_losc(channels, start_time, end_time)
@@ -605,7 +589,7 @@ class DataBuffer(object):
             self.dur = int(fname[3])
 
         fstart = int(self.ref + numpy.floor((start - self.ref) / float(self.dur)) * self.dur)
-        starts = numpy.arange(fstart, end, self.dur).astype(numpy.int)
+        starts = numpy.arange(fstart, end, self.dur).astype(int)
 
         keys = []
         for s in starts:
@@ -617,7 +601,6 @@ class DataBuffer(object):
             name = '%s/%s-%s-%s.gwf' % (pattern, self.beg, s, self.dur)
             # check that file actually exists, else abort now
             if not os.path.exists(name):
-                logging.info("%s does not seem to exist yet" % name)
                 raise RuntimeError
 
             keys.append(name)
@@ -653,14 +636,14 @@ class DataBuffer(object):
             return DataBuffer.advance(self, blocksize)
 
         except RuntimeError:
-            if lal.GPSTimeNow() > timeout + self.raw_buffer.end_time:
+            if pycbc.gps_now() > timeout + self.raw_buffer.end_time:
                 # The frame is not there and it should be by now, so we give up
                 # and treat it as zeros
                 DataBuffer.null_advance(self, blocksize)
                 return None
             else:
                 # I am too early to give up on this frame, so we should try again
-                time.sleep(1)
+                time.sleep(0.1)
                 return self.attempt_advance(blocksize, timeout=timeout)
 
 class StatusBuffer(DataBuffer):

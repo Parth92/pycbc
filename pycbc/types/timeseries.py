@@ -53,7 +53,8 @@ class TimeSeries(Array):
     sample_rate
     """
 
-    def __init__(self, initial_array, delta_t=None, epoch="", dtype=None, copy=True):
+    def __init__(self, initial_array, delta_t=None,
+                 epoch=None, dtype=None, copy=True):
         if len(initial_array) < 1:
             raise ValueError('initial_array must contain at least one sample.')
         if delta_t is None:
@@ -63,14 +64,12 @@ class TimeSeries(Array):
                 raise TypeError('must provide either an initial_array with a delta_t attribute, or a value for delta_t')
         if not delta_t > 0:
             raise ValueError('delta_t must be a positive number')
-        # We gave a nonsensical default value to epoch so we can test if it's been set.
-        # If the user passes in an initial_array that has an 'epoch' attribute and doesn't
-        # pass in a value of epoch, then our new object's epoch comes from initial_array.
-        # But if the user passed in a value---even 'None'---that will take precedence over
-        # anything set in initial_array.  Finally, if the user passes in something without
-        # an epoch attribute *and* doesn't pass in a value of epoch, it becomes 'None'
-        if not isinstance(epoch,_lal.LIGOTimeGPS):
-            if epoch == "":
+
+        # Get epoch from initial_array if epoch not given (or is None)
+        # If initialy array has no epoch, set epoch to 0.
+        # If epoch is provided, use that.
+        if not isinstance(epoch, _lal.LIGOTimeGPS):
+            if epoch is None:
                 if isinstance(initial_array, TimeSeries):
                     epoch = initial_array._epoch
                 else:
@@ -84,12 +83,25 @@ class TimeSeries(Array):
         self._delta_t = delta_t
         self._epoch = epoch
 
+    def epoch_close(self, other):
+        """ Check if the epoch is close enough to allow operations """
+        dt = abs(float(self.start_time - other.start_time))
+        return dt <= 1e-7
+
     def sample_rate_close(self, other):
         """ Check if the sample rate is close enough to allow operations """
-        if (other.delta_t - self.delta_t) / self.delta_t > 1e-4:
+
+        # compare our delta_t either to a another time series' or
+        # to a given sample rate (float)
+        if isinstance(other, TimeSeries):
+            odelta_t = other.delta_t
+        else:
+            odelta_t = 1.0/other
+
+        if (odelta_t - self.delta_t) / self.delta_t > 1e-4:
             return False
 
-        if abs(1 - other.delta_t / self.delta_t) * len(self) > 0.5:
+        if abs(1 - odelta_t / self.delta_t) * len(self) > 0.5:
             return False
 
         return True
@@ -100,15 +112,15 @@ class TimeSeries(Array):
     def _typecheck(self, other):
         if isinstance(other, TimeSeries):
             if not self.sample_rate_close(other):
-                raise ValueError('different delta_t')
-            if self._epoch != other._epoch:
-                raise ValueError('different epoch')
+                raise ValueError('different delta_t, {} vs {}'.format(
+                    self.delta_t, other.delta_t))
+            if not self.epoch_close(other):
+                raise ValueError('different epoch, {} vs {}'.format(
+                    self.start_time, other.start_time))
 
     def _getslice(self, index):
         # Set the new epoch---note that index.start may also be None
-        if self._epoch is None:
-            new_epoch = None
-        elif index.start is None:
+        if index.start is None:
             new_epoch = self._epoch
         else:
             if index.start < 0:
@@ -155,11 +167,11 @@ class TimeSeries(Array):
     def get_sample_rate(self):
         """Return the sample rate of the time series.
         """
-        return int(round(1.0/self.delta_t))
+        return 1.0/self.delta_t
     sample_rate = property(get_sample_rate,
                            doc="The sample rate of the time series.")
 
-    def time_slice(self, start, end):
+    def time_slice(self, start, end, mode='floor'):
         """Return the slice of the time series that contains the time range
         in GPS seconds.
         """
@@ -169,8 +181,24 @@ class TimeSeries(Array):
         if end > self.end_time:
             raise ValueError('Time series does not contain a time as late as %s' % end)
 
-        start_idx = int((start - self.start_time) * self.sample_rate)
-        end_idx = int((end - self.start_time) * self.sample_rate)
+        start_idx = float(start - self.start_time) * self.sample_rate
+        end_idx = float(end - self.start_time) * self.sample_rate
+
+        if _numpy.isclose(start_idx, round(start_idx)):
+            start_idx = round(start_idx)
+
+        if _numpy.isclose(end_idx, round(end_idx)):
+            end_idx = round(end_idx)
+
+        if mode == 'floor':
+            start_idx = int(start_idx)
+            end_idx = int(end_idx)
+        elif mode == 'nearest':
+            start_idx = int(round(start_idx))
+            end_idx = int(round(end_idx))
+        else:
+            raise ValueError("Invalid mode: {}".format(mode))
+
         return self[start_idx:end_idx]
 
     @property
@@ -391,10 +419,7 @@ class TimeSeries(Array):
             If time series is stored in GPU memory.
         """
         lal_data = None
-        if self._epoch is None:
-            ep = _lal.LIGOTimeGPS(0,0)
-        else:
-            ep = self._epoch
+        ep = self._epoch
 
         if self._data.dtype == _numpy.float32:
             lal_data = _lal.CreateREAL4TimeSeries("",ep,0,self.delta_t,_lal.SecondUnit,len(self))
@@ -440,7 +465,7 @@ class TimeSeries(Array):
              The output file name
         """
         scaled = _numpy.int16(self.numpy()/max(abs(self)) * 32767)
-        write_wav(file_name, self.sample_rate, scaled)
+        write_wav(file_name, int(self.sample_rate), scaled)
 
     def psd(self, segment_duration, **kwds):
         """ Calculate the power spectral density of this time series.
@@ -466,6 +491,57 @@ class TimeSeries(Array):
         return welch(self, seg_len=seg_len,
                            seg_stride=seg_stride,
                            **kwds)
+
+    def gate(self, time, window=0.25, method='taper', copy=True,
+             taper_width=0.25, invpsd=None):
+        """ Gate out portion of time series
+
+        Parameters
+        ----------
+        time: float
+            Central time of the gate in seconds
+        window: float
+            Half-length in seconds to remove data around gate time.
+        method: str
+            Method to apply gate, options are 'hard', 'taper', and 'paint'.
+        copy: bool
+            If False, do operations inplace to this time series, else return
+            new time series.
+        taper_width: float
+            Length of tapering region on either side of excized data. Only
+            applies to the taper gating method.
+        invpsd: pycbc.types.FrequencySeries
+            The inverse PSD to use for painting method. If not given,
+            a PSD is generated using default settings.
+
+        Returns
+        -------
+        data: pycbc.types.TimeSeris
+            Gated time series
+        """
+        data = self.copy() if copy else self
+        if method == 'taper':
+            from pycbc.strain import gate_data
+            return gate_data(data, [(time, window, taper_width)])
+        elif method == 'paint':
+            # Uses the hole-filling method of
+            # https://arxiv.org/pdf/1908.05644.pdf
+            from pycbc.strain.gate import gate_and_paint
+            if invpsd is None:
+                # These are some bare minimum settings, normally you
+                # should probably provide a psd
+                invpsd = 1. / self.filter_psd(self.duration/32, self.delta_f, 0)
+            lindex = int((time - window - self.start_time) / self.delta_t)
+            rindex = lindex + int(2 * window / self.delta_t)
+            lindex = lindex if lindex >= 0 else 0
+            rindex = rindex if rindex <= len(self) else len(self)
+            return gate_and_paint(data, lindex, rindex, invpsd, copy=False)
+        elif method == 'hard':
+            tslice = data.time_slice(time - window, time + window)
+            tslice[:] = 0
+            return data
+        else:
+            raise ValueError('Invalid method name: {}'.format(method))
 
     def filter_psd(self, segment_duration, delta_f, flow):
         """ Calculate the power spectral density of this time series.
@@ -757,13 +833,18 @@ class TimeSeries(Array):
             _numpy.savetxt(path, output)
         elif ext =='.hdf':
             key = 'data' if group is None else group
-            f = h5py.File(path)
-            ds = f.create_dataset(key, data=self.numpy(), compression='gzip',
-                                  compression_opts=9, shuffle=True)
-            ds.attrs['start_time'] = float(self.start_time)
-            ds.attrs['delta_t'] = float(self.delta_t)
+            with h5py.File(path, 'a') as f:
+                ds = f.create_dataset(key, data=self.numpy(),
+                                      compression='gzip',
+                                      compression_opts=9, shuffle=True)
+                ds.attrs['start_time'] = float(self.start_time)
+                ds.attrs['delta_t'] = float(self.delta_t)
         else:
             raise ValueError('Path must end with .npy, .txt or .hdf')
+
+    def to_timeseries(self):
+        """ Return time series"""
+        return self
 
     @_nocomplex
     def to_frequencyseries(self, delta_f=None):
@@ -805,35 +886,62 @@ class TimeSeries(Array):
         fft(tmp, f)
         return f
 
-    def add_into(self, other):
-        """Return the sum of the two time series accounting for the time stamp.
+    def inject(self, other, copy=True):
+        """Return copy of self with other injected into it.
 
-        The other vector will be resized and time shifted wiht sub-sample
+        The other vector will be resized and time shifted with sub-sample
         precision before adding. This assumes that one can assume zeros
         outside of the original vector range.
         """
         # only handle equal sample rate for now.
-        if self.sample_rate != other.sample_rate:
+        if not self.sample_rate_close(other):
             raise ValueError('Sample rate must be the same')
-
+        # determine if we want to inject in place or not
+        if copy:
+            ts = self.copy()
+        else:
+            ts = self
         # Other is disjoint
-        if ((other.start_time > self.end_time) or
-           (self.start_time > other.end_time)):
-            return self.copy()
+        if ((other.start_time >= ts.end_time) or
+           (ts.start_time > other.end_time)):
+            return ts
 
         other = other.copy()
-        dt = float((other.start_time - self.start_time) * self.sample_rate)
+        dt = float((other.start_time - ts.start_time) * ts.sample_rate)
+
+        # This coaligns other to the time stepping of self
         if not dt.is_integer():
-            diff = (dt - _numpy.floor(dt))
+            diff = (dt - _numpy.floor(dt)) * ts.delta_t
+
+            # insert zeros at end
             other.resize(len(other) + (len(other) + 1) % 2 + 1)
+
+            # fd shift to the right
             other = other.cyclic_time_shift(diff)
 
-        ts = self.copy()
-        start = max(other.start_time, self.start_time)
-        end = min(other.end_time, self.end_time)
-        part = ts.time_slice(start, end)
-        part += other.time_slice(start, end)
+        # get indices of other with respect to self
+        # this is already an integer to floating point precission
+        left = float(other.start_time - ts.start_time) * ts.sample_rate
+        left = int(round(left))
+        right = left + len(other)
+
+        oleft = 0
+        oright = len(other)
+
+        # other overhangs on left so truncate
+        if left < 0:
+            oleft = -left
+            left = 0
+
+        # other overhangs on right so truncate
+        if right > len(ts):
+            oright = len(other) - (right - len(ts))
+            right = len(ts)
+
+        ts[left:right] += other[oleft:oright]
         return ts
+
+    add_into = inject  # maintain backwards compatibility for now
 
     @_nocomplex
     def cyclic_time_shift(self, dt):
@@ -842,7 +950,7 @@ class TimeSeries(Array):
         Shift the data and timestamps in the time domain a given number of
         seconds. To just change the time stamps, do ts.start_time += dt.
         The time shift may be smaller than the intrinsic sample rate of the data.
-        Note that data will be cycliclly rotated, so if you shift by 2
+        Note that data will be cyclically rotated, so if you shift by 2
         seconds, the final 2 seconds of your data will now be at the
         beginning of the data set.
 
@@ -866,7 +974,7 @@ class TimeSeries(Array):
               low_frequency_cutoff=None, high_frequency_cutoff=None):
         """ Return the match between the two TimeSeries or FrequencySeries.
 
-        Return the match between two waveforms. This is equivelant to the overlap
+        Return the match between two waveforms. This is equivalent to the overlap
         maximized over time and phase. By default, the other vector will be
         resized to match self. This may remove high frequency content or the
         end of the vector.
@@ -908,24 +1016,50 @@ class TimeSeries(Array):
         from scipy.signal import detrend
         return self._return(detrend(self.numpy(), type=type))
 
+    def plot(self, **kwds):
+        """ Basic plot of this time series
+        """
+        from matplotlib import pyplot
+
+        if self.kind == 'real':
+            plot = pyplot.plot(self.sample_times, self, **kwds)
+            return plot
+        elif self.kind == 'complex':
+            plot1 = pyplot.plot(self.sample_times, self.real(), **kwds)
+            plot2 = pyplot.plot(self.sample_times, self.imag(), **kwds)
+            return plot1, plot2
+
 def load_timeseries(path, group=None):
-    """
-    Load a TimeSeries from a .hdf, .txt or .npy file. The
-    default data types will be double precision floating point.
+    """Load a TimeSeries from an HDF5, ASCII or Numpy file. The file type is
+    inferred from the file extension, which must be `.hdf`, `.txt` or `.npy`.
+
+    For ASCII and Numpy files, the first column of the array is assumed to
+    contain the sample times. If the array has two columns, a real-valued time
+    series is returned. If the array has three columns, the second and third
+    ones are assumed to contain the real and imaginary parts of a complex time
+    series.
+
+    For HDF files, the dataset is assumed to contain the attributes `delta_t`
+    and `start_time`, which should contain respectively the sampling period in
+    seconds and the start GPS time of the data.
+
+    The default data types will be double precision floating point.
 
     Parameters
     ----------
     path: string
-        source file path. Must end with either .npy or .txt.
+        Input file path. Must end with either `.npy`, `.txt` or `.hdf`.
 
     group: string
-        Additional name for internal storage use. Ex. hdf storage uses
-        this as the key value.
+        Additional name for internal storage use. When reading HDF files, this
+        is the path to the HDF dataset to read.
 
     Raises
     ------
     ValueError
-        If path does not end in .npy or .txt.
+        If path does not end in a supported extension.
+        For Numpy and ASCII input files, this is also raised if the array
+        does not have 2 or 3 dimensions.
     """
     ext = _os.path.splitext(path)[1]
     if ext == '.npy':
@@ -934,24 +1068,21 @@ def load_timeseries(path, group=None):
         data = _numpy.loadtxt(path)
     elif ext == '.hdf':
         key = 'data' if group is None else group
-        f = h5py.File(path)
-        data = f[key][:]
-        series = TimeSeries(data, delta_t=f[key].attrs['delta_t'],
-                                  epoch=f[key].attrs['start_time'])
-        f.close()
+        with h5py.File(path, 'r') as f:
+            data = f[key][:]
+            series = TimeSeries(data, delta_t=f[key].attrs['delta_t'],
+                                epoch=f[key].attrs['start_time'])
         return series
     else:
         raise ValueError('Path must end with .npy, .hdf, or .txt')
 
+    delta_t = (data[-1][0] - data[0][0]) / (len(data) - 1)
+    epoch = _lal.LIGOTimeGPS(data[0][0])
     if data.ndim == 2:
-        delta_t = (data[-1][0] - data[0][0]) / (len(data)-1)
-        epoch = _lal.LIGOTimeGPS(data[0][0])
         return TimeSeries(data[:,1], delta_t=delta_t, epoch=epoch)
     elif data.ndim == 3:
-        delta_t = (data[-1][0] - data[0][0]) / (len(data)-1)
-        epoch = _lal.LIGOTimeGPS(data[0][0])
         return TimeSeries(data[:,1] + 1j*data[:,2],
                           delta_t=delta_t, epoch=epoch)
-    else:
-        raise ValueError('File has %s dimensions, cannot convert to Array, \
-                          must be 2 (real) or 3 (complex)' % data.ndim)
+
+    raise ValueError('File has %s dimensions, cannot convert to TimeSeries, \
+                      must be 2 (real) or 3 (complex)' % data.ndim)

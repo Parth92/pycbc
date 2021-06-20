@@ -110,7 +110,7 @@ if 'command_line' in f.attrs:
 else:
     cmd = ' '.join(sys.argv)
 
-pycbc.results.save_fig_with_metadata(fig, args.output_file, 
+pycbc.results.save_fig_with_metadata(fig, args.output_file,
                              cmd=cmd, fig_kwds={'dpi': 150},
                              title=args.plot_title,
                              caption=args.plot_caption)
