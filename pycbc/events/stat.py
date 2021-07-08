@@ -2046,14 +2046,14 @@ statistic_dict = {
     'exp_fit_stat': ExpFitStatistic,
     'exp_fit_csnr': ExpFitCombinedSNR,
     'phasetd_exp_fit_stat': PhaseTDExpFitStatistic,
+    'exp_fit_bg_rate': ExpFitBgRateStatistic,
+    'phasetd_exp_fit_fgbg_norm': ExpFitFgBgNormStatistic,
+    'phasetd_exp_fit_fgbg_bbh_norm': ExpFitFgBgNormBBHStatistic,
     'ml_stat_newsnr': MLStatistic_newsnr,
     'ml_stat_phasetd_newsnr': MLStatistic_PhaseTDStatistic,
     'ml_stat_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat,
     'ml_stat_custom_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat_custom,
     'ml_alt_stat_mcdep_phasetd_exp_fit_stat_sgveto': MLStatistic_PhTDExpFitSGStat_MCdep,
-    'exp_fit_bg_rate': ExpFitBgRateStatistic,
-    'phasetd_exp_fit_fgbg_norm': ExpFitFgBgNormStatistic,
-    'phasetd_exp_fit_fgbg_bbh_norm': ExpFitFgBgNormBBHStatistic,
 }
 
 
