@@ -66,6 +66,9 @@ parser.add_argument('--stage-input-dir', type=str, default='/dev/shm',
 stat.insert_statistic_option_group(parser)
 args = parser.parse_args()
 
+# if mlstat
+is_mlstat = 'ml_stat' in args.ranking_statistic or 'ml_alt_stat' in args.ranking_statistic
+
 # flatten the list of lists of filenames to a single list (may be empty)
 args.segment_name = sum(args.segment_name, [])
 args.veto_files = sum(args.veto_files, [])
@@ -154,10 +157,20 @@ else:
 # 'data' will store output of coinc finding
 # in addition to these lists of coinc info, will also store trigger times and
 # ids in each ifo
-data = {'stat': [], 'decimation_factor': [], 'timeslide_id': [], 'template_id': []}
+if is_mlstat:
+    data = {'stat': [], 'decimation_factor': [],
+            'timeslide_id': [],'template_id': []}
+else:
+    data = {'stat': [], 'decimation_factor': [],
+            'timeslide_id': [], 'template_id': [], 'p_cbc_c': []}
+
 for ifo in trigs.ifos:
     data['%s/time' % ifo] = []
     data['%s/trigger_id' % ifo] = []
+    if is_mlstat:
+        # create entries for P_cbc and P_gn in each detector and P_cbc_combined
+        data['%s/p_cbc' % ifo] = []
+        data['%s/p_gn' % ifo] = []
 
 total_factors = [1]
 threshes = [numpy.inf]
@@ -171,15 +184,21 @@ for decstr in args.loudest_keep_values:
     total_factors.append(total_factors[-1] * int(factor))
 
 # Gather the coincs from a single template
-def process_template(tnum):
+def process_template(tnum, is_mlstat=False):
     local_data = copy.deepcopy(data)
     times_full = {}
     sds_full = {}
     tids_full = {}
+    if is_mlstat:
+        p_cbc_full = {}
+        p_gn_full = {}
     logging.info('Obtaining trigs for template %i ..' % (tnum))
     for i, sngl in zip(trigs.ifos, trigs.singles):
         tids_full[i] = sngl.set_template(tnum)
         times_full[i] = sngl['end_time']
+        if is_mlstat:
+            p_cbc_full[i] = sngl['p_cbc']
+            p_gn_full[i] = sngl['p_gn']
         logging.info('%s:%s' % (i, len(tids_full[i])))
 
         # get single-detector statistic
@@ -241,6 +260,13 @@ def process_template(tnum):
         tids = tids_full.copy()
         tids[args.fixed_ifo] = tids_full[args.fixed_ifo][fixed_idxs]
 
+        if is_mlstat:
+            p_cbcs = p_cbc_full.copy()
+            p_cbcs[args.fixed_ifo] = p_cbc_full[args.fixed_ifo][fixed_idxs]
+
+            p_gns = p_gn_full.copy()
+            p_gns[args.fixed_ifo] = p_gn_full[args.fixed_ifo][fixed_idxs]
+
         # if decimation is being used precalculate the fixed network coincidences
         if len(threshes) > 1:
             fixed_ifos = [i for i in trigs.ifos if i != args.pivot_ifo]
@@ -297,6 +323,11 @@ def process_template(tnum):
             sds[args.pivot_ifo] = sds_full[args.pivot_ifo][pivot_idxs]
 
             tids[args.pivot_ifo] = tids_full[args.pivot_ifo][pivot_idxs]
+
+            if is_mlstat:
+                p_cbcs[args.pivot_ifo] = p_cbc_full[args.pivot_ifo][pivot_idxs]
+
+                p_gns[args.pivot_ifo] = p_gn_full[args.pivot_ifo][pivot_idxs]
 
             # Do time coincidence for slides that will be kept after the last decimation
             ids, slide = coinc.time_multi_coincidence(times,
@@ -409,6 +440,13 @@ def process_template(tnum):
                 addtriggerid = tids[ifo][ids[ifo]]
                 local_data['%s/time' % ifo] += [addtime]
                 local_data['%s/trigger_id' % ifo] += [addtriggerid]
+
+                if is_mlstat:
+                    addpcbc = p_cbcs[ifo][ids[ifo]]
+                    addpgn = p_gns[ifo][ids[ifo]]
+                    local_data['%s/p_cbc' % ifo] += [addpcbc]
+                    local_data['%s/p_gn' % ifo] += [addpgn]
+
             local_data['stat'] += [cstat]
             local_data['decimation_factor'] += [dec]
             local_data['timeslide_id'] += [slide]
@@ -418,10 +456,10 @@ def process_template(tnum):
     return local_data
 
 if args.nprocesses == 1:
-    ldatas = list(map(process_template, list(template_ids)))
+    ldatas = list(map(process_template, list(template_ids), [is_mlstat]*len(template_ids)))
 else:
     p = multiprocessing.Pool(args.nprocesses)
-    ldatas = p.map(process_template, list(template_ids))
+    ldatas = p.map(process_template, list(template_ids), [is_mlstat]*len(template_ids))
 
 logging.info('merging data from the templates')
 for ldata in ldatas:

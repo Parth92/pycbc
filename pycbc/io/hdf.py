@@ -245,11 +245,22 @@ class StatmapData(DictArray):
 
 class MultiifoStatmapData(StatmapData):
     def __init__(self, data=None, seg=None, attrs=None,
-                       files=None, ifos=None):
-        groups = ['decimation_factor', 'stat', 'template_id', 'timeslide_id']
+                       files=None, ifos=None, containsMLprobs=None):
+
+        ##### MLStat change #####
+        if containsMLprobs:
+            # create entry for P_cbc_combined
+            groups = ['decimation_factor', 'stat', 'template_id', 'timeslide_id', 'p_cbc_c']
+        else:
+            groups = ['decimation_factor', 'stat', 'template_id', 'timeslide_id']
+
         for ifo in ifos:
             groups += ['%s/time' % ifo]
             groups += ['%s/trigger_id' % ifo]
+            if containsMLprobs:
+                # create entries for P_cbc and P_gn in each detector
+                groups += ['%s/p_cbc' % ifo]
+                groups += ['%s/p_gn' % ifo]
 
         super(MultiifoStatmapData, self).__init__(data=data, files=files,
                                                   groups=groups, attrs=attrs,

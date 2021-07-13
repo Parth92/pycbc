@@ -72,6 +72,8 @@ parser.add_argument('--additional-event-times', type=float, nargs="+",
                     help="Additional event times which will be removed from "
                          "both inclusive and exclusive background "
                           "(gps seconds)")
+parser.add_argument('--ml-processed', action='store_true',
+                    help='If bkg files are ML processed')
 parser.add_argument('--output-file')
 args = parser.parse_args()
 
@@ -96,7 +98,7 @@ pycbc.init_logging(args.verbose)
 
 logging.info("Loading coinc triggers")
 logging.info("IFO input: %s" % args.ifos)
-all_trigs = pycbc.io.MultiifoStatmapData(files=args.coinc_files, ifos=args.ifos)
+all_trigs = pycbc.io.MultiifoStatmapData(files=args.coinc_files, ifos=args.ifos, containsMLprobs=args.ml_processed)
 if 'ifos' in all_trigs.attrs:
     ifos = all_trigs.attrs['ifos'].split(' ')
     logging.info('using ifos from file {}'.format(args.coinc_files[0]))
