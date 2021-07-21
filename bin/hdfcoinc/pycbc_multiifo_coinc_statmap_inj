@@ -36,6 +36,8 @@ parser.add_argument('--ranking-statistic-threshold', type=float,
                          ' a unique inclusive background.')
 parser.add_argument('--ifos', nargs='+',
                     help='List of ifos used in these coincidence files')
+parser.add_argument('--ml-processed', action='store_true',
+                    help='If bkg files are ML processed')
 parser.add_argument('--output-file')
 args = parser.parse_args()
 
@@ -45,7 +47,7 @@ if args.verbose:
 
 window = args.cluster_window
 logging.info("Loading coinc zerolag triggers")
-zdata = pycbc.io.MultiifoStatmapData(files=args.zero_lag_coincs, ifos=args.ifos)
+zdata = pycbc.io.MultiifoStatmapData(files=args.zero_lag_coincs, ifos=args.ifos, containsMLprobs=args.ml_processed)
 zdata = zdata.cluster(window)
 
 logging.info("Loading coinc full inj triggers")
@@ -101,8 +103,8 @@ if len(zdata) > 0:
     f['foreground/fap_exc'] = fap_exc
 
     logging.info('calculating injection backgrounds')
-    ifotimes = zip(zdata.data['%s/time' % ifo] for ifo in args.ifos)
-    ftimes = numpy.concatenate(ifotimes).mean(axis=0)
+    ifotimes = numpy.array([zdata.data['%s/time' % ifo] for ifo in args.ifos])
+    ftimes = ifotimes.mean(axis=0)
     start, end = ftimes - args.veto_window, ftimes + args.veto_window
 
     fnlouder = numpy.zeros(len(ftimes), dtype=numpy.float32)

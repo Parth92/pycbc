@@ -37,6 +37,7 @@ from pycbc.waveform import get_td_waveform, utils as wfutils
 from pycbc.waveform import ringdown_td_approximants
 from pycbc.types import float64, float32, TimeSeries
 from pycbc.detector import Detector
+from pycbc.conversions import tau0_from_mass1_mass2
 import pycbc.io
 
 from six import add_metaclass
@@ -170,23 +171,18 @@ class _XMLInjectionSet(object):
                           if inj.simulation_id in simulation_ids]
         injection_parameters = []
         for inj in injections:
-            if f_lower is None:
-                f_l = inj.f_lower
-            else:
-                f_l = f_lower
+            f_l = inj.f_lower if f_lower is None else f_lower
             # roughly estimate if the injection may overlap with the segment
             # Add 2s to end_time to account for ringdown and light-travel delay
             end_time = inj.get_time_geocent() + 2
-            inj_length = sim.SimInspiralTaylorLength(
-                strain.delta_t, inj.mass1 * lal.MSUN_SI,
-                inj.mass2 * lal.MSUN_SI, f_l, 0)
+            inj_length = tau0_from_mass1_mass2(inj.mass1, inj.mass2, f_l)
             # Start time is taken as twice approx waveform length with a 1s
             # safety buffer
-            start_time = inj.get_time_geocent() - 2 * (inj_length+1)
+            start_time = inj.get_time_geocent() - 2 * (inj_length + 1)
             if end_time < t0 or start_time > t1:
                 continue
             signal = self.make_strain_from_inj_object(inj, strain.delta_t,
-                     detector_name, f_lower=f_l, distance_scale=distance_scale)
+                    detector_name, f_lower=f_l, distance_scale=distance_scale)
             if float(signal.start_time) > t1:
                 continue
 
@@ -233,10 +229,7 @@ class _XMLInjectionSet(object):
             h(t) corresponding to the injection.
         """
         detector = Detector(detector_name)
-        if f_lower is None:
-            f_l = inj.f_lower
-        else:
-            f_l = f_lower
+        f_l = inj.f_lower if f_lower is None else f_lower
 
         name, phase_order = legacy_approximant_name(inj.waveform)
 
@@ -340,9 +333,14 @@ class _HDFInjectionSet(object):
         group = fp if hdf_group is None else fp[hdf_group]
         self.filehandler = fp
         # get parameters
-        parameters = group.keys()
+        parameters = list(group.keys())
         # get all injection parameter values
         injvals = {param: group[param][()] for param in parameters}
+        # make sure Numpy S strings are loaded as strings and not bytestrings
+        # (which could mess with approximant names, for example)
+        for k in injvals:
+            if injvals[k].dtype.kind == 'S':
+                injvals[k] = injvals[k].astype('U')
         # if there were no variable args, then we only have a single injection
         if len(parameters) == 0:
             numinj = 1
@@ -350,7 +348,8 @@ class _HDFInjectionSet(object):
             numinj = tuple(injvals.values())[0].size
         # add any static args in the file
         try:
-            self.static_args = group.attrs['static_args']
+            # ensure parameter names are string types
+            self.static_args = group.attrs['static_args'].astype('U')
         except KeyError:
             self.static_args = []
         parameters.extend(self.static_args)
@@ -368,6 +367,9 @@ class _HDFInjectionSet(object):
                 # otherwise, we can just repeat the value the needed number of
                 # times
                 arr = np.repeat(val, numinj)
+            # make sure any byte strings are stored as strings instead
+            if arr.dtype.char == 'S':
+                arr = arr.astype('U')
             injvals[param] = arr
         # make sure a coalescence time is specified for injections
         if 'tc' not in injvals:
@@ -427,16 +429,29 @@ class _HDFInjectionSet(object):
             # write metadata
             if static_args is None:
                 static_args = {}
-            fp.attrs["static_args"] = static_args.keys()
+            fp.attrs["static_args"] = list(static_args.keys())
             fp.attrs['injtype'] = cls.injtype
             for key, val in metadata.items():
                 fp.attrs[key] = val
             if write_params is None:
                 write_params = samples.fieldnames
             for arg, val in static_args.items():
-                fp.attrs[arg] = val
+                try:
+                    fp.attrs[arg] = val
+                except TypeError:
+                    # can get this in python 3 if the val was numpy.str_ type
+                    # try decoding it and writing
+                    fp.attrs[arg] = str(val)
             for field in write_params:
-                fp[field] = samples[field]
+                try:
+                    fp[field] = samples[field]
+                except TypeError as e:
+                    # can get this in python 3 if the val was a numpy.str_ type
+                    # we'll try again as a string type
+                    if samples[field].dtype.char == 'U':
+                        fp[field] = samples[field].astype('S')
+                    else:
+                        raise e
 
 
 class CBCHDFInjectionSet(_HDFInjectionSet):
@@ -492,21 +507,15 @@ class CBCHDFInjectionSet(_HDFInjectionSet):
         injections = self.table
         if simulation_ids:
             injections = injections[list(simulation_ids)]
-        for ii in range(injections.size):
-            inj = injections[ii]
-            if f_lower is None:
-                f_l = inj.f_lower
-            else:
-                f_l = f_lower
+        for ii, inj in enumerate(injections):
+            f_l = inj.f_lower if f_lower is None else f_lower
             # roughly estimate if the injection may overlap with the segment
             # Add 2s to end_time to account for ringdown and light-travel delay
             end_time = inj.tc + 2
-            inj_length = sim.SimInspiralTaylorLength(
-                strain.delta_t, inj.mass1 * lal.MSUN_SI,
-                inj.mass2 * lal.MSUN_SI, f_l, 0)
+            inj_length = tau0_from_mass1_mass2(inj.mass1, inj.mass2, f_l)
             # Start time is taken as twice approx waveform length with a 1s
             # safety buffer
-            start_time = inj.tc - 2 * (inj_length+1)
+            start_time = inj.tc - 2 * (inj_length + 1)
             if end_time < t0 or start_time > t1:
                 continue
             signal = self.make_strain_from_inj_object(inj, strain.delta_t,
@@ -742,7 +751,17 @@ def get_hdf_injtype(sim_file):
             ftype = fp.attrs['injtype']
         except KeyError:
             ftype = CBCHDFInjectionSet.injtype
-    return hdfinjtypes[ftype]
+    try:
+        return hdfinjtypes[ftype]
+    except KeyError:
+        # may get a key error if the file type was stored as unicode instead
+        # of string; if so, try decoding it
+        try:
+            ftype = str(ftype.decode())
+        except AttributeError:
+            # not actually a byte error; passing will reraise the KeyError
+            pass
+        return hdfinjtypes[ftype]
 
 
 def hdf_injtype_from_approximant(approximant):
@@ -855,6 +874,21 @@ class InjectionSet(object):
                 injcls = hdfinjtypes[injtype]
             injcls.write(filename, samples, write_params, static_args,
                          **metadata)
+
+    @staticmethod
+    def from_cli(opt):
+        """Return an instance of InjectionSet configured as specified
+        on the command line.
+        """
+        if opt.injection_file is None:
+            return None
+
+        kwa = {}
+        if opt.injection_f_ref is not None:
+            kwa['f_ref'] = opt.injection_f_ref
+        if opt.injection_f_final is not None:
+            kwa['f_final'] = opt.injection_f_final
+        return InjectionSet(opt.injection_file, **kwa)
 
 
 class SGBurstInjectionSet(object):

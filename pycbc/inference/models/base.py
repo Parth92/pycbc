@@ -120,6 +120,8 @@ class SamplingTransforms(object):
                                 if arg not in replace_parameters]
         # add the sampling parameters
         self.sampling_params += sampling_params
+        # sort to make sure we have a consistent order
+        self.sampling_params.sort()
         self.sampling_transforms = sampling_transforms
 
     def logjacobian(self, **params):
@@ -272,7 +274,7 @@ def read_sampling_params_from_config(cp, section_group=None,
         map_args = cp.get(section, args)
         sampling_params.update(set(map(str.strip, map_args.split(','))))
         replaced_params.update(set(map(str.strip, args.split(','))))
-    return list(sampling_params), list(replaced_params)
+    return sorted(sampling_params), sorted(replaced_params)
 
 
 #
@@ -479,8 +481,8 @@ class BaseModel(object):
         """
         return self._current_stats.getstatsdict(self.default_stats)
 
-    def _trytoget(self, statname, fallback, **kwargs):
-        """Helper function to get a stat from ``_current_stats``.
+    def _trytoget(self, statname, fallback, apply_transforms=False, **kwargs):
+        r"""Helper function to get a stat from ``_current_stats``.
 
         If the statistic hasn't been calculated, ``_current_stats`` will raise
         an ``AttributeError``. In that case, the ``fallback`` function will
@@ -493,6 +495,9 @@ class BaseModel(object):
             The stat to get from ``current_stats``.
         fallback : method of self
             The function to call if the property call fails.
+        apply_transforms : bool, optional
+            Apply waveform transforms to the current parameters before calling
+            the fallback function. Default is False.
         \**kwargs :
             Any other keyword arguments are passed through to the function.
 
@@ -504,6 +509,11 @@ class BaseModel(object):
         try:
             return getattr(self._current_stats, statname)
         except AttributeError:
+            # apply waveform transforms if requested
+            if apply_transforms and self.waveform_transforms is not None:
+                self._current_params = transforms.apply_transforms(
+                    self._current_params, self.waveform_transforms,
+                    inverse=False)
             val = fallback(**kwargs)
             setattr(self._current_stats, statname, val)
             return val
@@ -516,7 +526,8 @@ class BaseModel(object):
         If that raises an ``AttributeError``, will call `_loglikelihood`` to
         calculate it and store it to ``current_stats``.
         """
-        return self._trytoget('loglikelihood', self._loglikelihood)
+        return self._trytoget('loglikelihood', self._loglikelihood,
+                              apply_transforms=True)
 
     @abstractmethod
     def _loglikelihood(self):
@@ -612,7 +623,7 @@ class BaseModel(object):
         return p0
 
     def _transform_params(self, **params):
-        """Applies all transforms to the given params.
+        """Applies sampling transforms and boundary conditions to parameters.
 
         Parameters
         ----------
@@ -628,11 +639,6 @@ class BaseModel(object):
         # variable args
         if self.sampling_transforms is not None:
             params = self.sampling_transforms.apply(params, inverse=True)
-        # apply waveform transforms
-        if self.waveform_transforms is not None:
-            params = transforms.apply_transforms(params,
-                                                 self.waveform_transforms,
-                                                 inverse=False)
         # apply boundary conditions
         params = self.prior_distribution.apply_boundary_conditions(**params)
         return params

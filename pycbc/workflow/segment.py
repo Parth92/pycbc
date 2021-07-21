@@ -1306,7 +1306,7 @@ def cat_to_veto_def_cat(val):
     Returns
     -------
     pipedown_str : str
-        The pipedown equivelant notation that can be passed to programs
+        The pipedown equivalent notation that can be passed to programs
     that expect this definition.
     """
     if val == '1':
@@ -1423,7 +1423,7 @@ def get_segments_file(workflow, name, option_name, out_dir):
         veto_definer = save_veto_definer(workflow.cp, out_dir, [])
 
     # Check for provided server
-    server = "segments.ligo.org"
+    server = "https://segments.ligo.org"
     if cp.has_option("workflow-segments", "segments-database-url"):
         server = cp.get("workflow-segments",
                                  "segments-database-url")
@@ -1431,6 +1431,12 @@ def get_segments_file(workflow, name, option_name, out_dir):
     source = "any"
     if cp.has_option("workflow-segments", "segments-source"):
         source = cp.get("workflow-segments", "segments-source")
+    if source == "file":
+        local_file_path = \
+            resolve_url(cp.get("workflow-segments", option_name+"-file"))
+        pfn = os.path.join(out_dir, os.path.basename(local_file_path))
+        shutil.move(local_file_path, pfn)
+        return SegFile.from_segment_xml(pfn)
 
     segs = {}
     for ifo in workflow.ifos:

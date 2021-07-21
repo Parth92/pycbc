@@ -702,7 +702,7 @@ def compute_max_snr_over_sky_loc_stat_no_phase(hplus, hcross, hphccorr,
         The SNR maximized over sky location
     """
     # NOTE: Not much optimization has been done here! This may need to be
-    # C-ified using scipy.weave.
+    # Cythonized.
 
     if out is None:
         out = zeros(len(hplus))
@@ -812,11 +812,9 @@ def compute_u_val_for_sky_loc_stat_no_phase(hplus, hcross, hphccorr,
     # Initialize tan_kappa array
     u_val = denom * 0.
     # Catch the denominator -> 0 case
-    bad_lgc = (denom == 0)
-    u_val[bad_lgc] = 1E17
+    numpy.putmask(u_val, denom == 0, 1E17)
     # Otherwise do normal statistic
-    u_val[~bad_lgc] = (-rhoplusre+overlap*rhocrossre) / \
-        (-rhocrossre+overlap*rhoplusre)
+    numpy.putmask(u_val, denom != 0, (-rhoplusre+overlap*rhocrossre)/(-rhocrossre+overlap*rhoplusre))
     coa_phase = numpy.zeros(len(indices), dtype=numpy.float32)
 
     return u_val, coa_phase
@@ -1003,7 +1001,7 @@ def make_frequency_series(vec):
         return vec
     if isinstance(vec, TimeSeries):
         N = len(vec)
-        n = N/2+1
+        n = N // 2 + 1
         delta_f = 1.0 / N / vec.delta_t
         vectilde =  FrequencySeries(zeros(n, dtype=complex_same_precision_as(vec)),
                                     delta_f=delta_f, copy=False)
@@ -1088,7 +1086,7 @@ def sigmasq(htilde, psd = None, low_frequency_cutoff=None,
     if psd:
         try:
             numpy.testing.assert_almost_equal(ht.delta_f, psd.delta_f)
-        except:
+        except AssertionError:
             raise ValueError('Waveform does not have same delta_f as psd')
 
     if psd is None:
@@ -1234,10 +1232,11 @@ def matched_filter_core(template, data, psd=None, low_frequency_cutoff=None,
 
     if psd is not None:
         if isinstance(psd, FrequencySeries):
-            if psd.delta_f == stilde.delta_f :
-                qtilde[kmin:kmax] /= psd[kmin:kmax]
-            else:
-                raise TypeError("PSD delta_f does not match data")
+            try:
+                numpy.testing.assert_almost_equal(stilde.delta_f, psd.delta_f)
+            except AssertionError:
+                raise ValueError("PSD delta_f does not match data")
+            qtilde[kmin:kmax] /= psd[kmin:kmax]
         else:
             raise TypeError("PSD must be a FrequencySeries")
 
@@ -1319,7 +1318,7 @@ def match(vec1, vec2, psd=None, low_frequency_cutoff=None,
           high_frequency_cutoff=None, v1_norm=None, v2_norm=None):
     """ Return the match between the two TimeSeries or FrequencySeries.
 
-    Return the match between two waveforms. This is equivelant to the overlap
+    Return the match between two waveforms. This is equivalent to the overlap
     maximized over time and phase.
 
     Parameters
@@ -1681,6 +1680,10 @@ class LiveBatchMatchedFilter(object):
         # Find the peaks in our SNR times series from the various templates
         i = 0
         for htilde in tgroup:
+            if hasattr(htilde, 'time_offset'):
+                if 'time_offset' not in result:
+                    result['time_offset'] = []
+
             l = htilde.out[seg].abs_arg_max()
 
             sgm = htilde.sigmasq(psd)
@@ -1715,8 +1718,11 @@ class LiveBatchMatchedFilter(object):
 
             for key in tkeys:
                 result[key].append(htilde.dict_params[key])
-            i += 1
 
+            if hasattr(htilde, 'time_offset'):
+                result['time_offset'].append(htilde.time_offset)
+
+            i += 1
 
         result['snr'] = abs(snr[0:i])
         result['coa_phase'] = numpy.angle(snr[0:i])
@@ -1726,6 +1732,9 @@ class LiveBatchMatchedFilter(object):
 
         for key in tkeys:
             result[key] = numpy.array(result[key])
+
+        if 'time_offset' in result:
+            result['time_offset'] = numpy.array(result['time_offset'])
 
         return result, veto_info
 
@@ -1902,4 +1911,3 @@ __all__ = ['match', 'matched_filter', 'sigmasq', 'sigma', 'get_cutoff_indices',
            'compute_u_val_for_sky_loc_stat_no_phase',
            'compute_u_val_for_sky_loc_stat',
            'followup_event_significance']
-

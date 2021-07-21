@@ -23,6 +23,7 @@ from __future__ import print_function
 
 import sys
 import os, subprocess, shutil
+import platform
 
 from distutils.errors import DistutilsError
 from distutils.command.clean import clean as _clean
@@ -33,11 +34,12 @@ from setuptools.command.build_ext import build_ext as _build_ext
 from setuptools import find_packages
 
 requires = []
-setup_requires = ['numpy>=1.13.0,<1.15.3; python_version <= "2.7"',
-                  'numpy>=1.13.0; python_version > "3.0"']
+setup_requires = ['numpy>=1.16.0']
 install_requires =  setup_requires + ['Mako>=1.0.1',
-                      'cython',
+                      'cython>=0.29',
                       'decorator>=3.4.2',
+                      'numpy>=1.16.0,<1.19; python_version >= "3.5"',
+                      'numpy>=1.16.0,<1.17.0; python_version <= "2.7"',
                       'scipy>=0.16.0; python_version >= "3.5"',
                       'scipy>=0.16.0,<1.3.0; python_version <= "3.4"',
                       'matplotlib>=1.5.1',
@@ -54,7 +56,7 @@ install_requires =  setup_requires + ['Mako>=1.0.1',
                       'six>=1.10.0',
                       'ligo-segments',
                       'tqdm',
-                      'weave>=0.16.0; python_version <= "2.7"',
+                      'gwdatafind',
                       ]
 
 def find_files(dirname, relpath=None):
@@ -122,8 +124,8 @@ def get_version_info():
         vinfo = _version_helper.generate_git_version_info()
     except:
         vinfo = vdummy()
-        vinfo.version = '1.14.dev2'
-        vinfo.release = 'False'
+        vinfo.version = '1.16.12'
+        vinfo.release = 'True'
 
     with open('pycbc/version.py', 'w') as f:
         f.write("# coding: utf-8\n")
@@ -174,7 +176,7 @@ class build_docs(Command):
     def finalize_options(self):
         pass
     def run(self):
-        subprocess.check_call("cd docs; cp Makefile.std Makefile; cp conf_std.py conf.py; sphinx-apidoc "
+        subprocess.check_call("cd docs; cp Makefile.std Makefile; sphinx-apidoc "
                               " -o ./ -f -A 'PyCBC dev team' -V '0.1' ../pycbc && make html",
                             stderr=subprocess.STDOUT, shell=True)
 
@@ -187,7 +189,7 @@ class build_gh_pages(Command):
         pass
     def run(self):
         subprocess.check_call("mkdir -p _gh-pages/latest && touch _gh-pages/.nojekyll && "
-                              "cd docs; cp Makefile.gh_pages Makefile; cp conf_std.py conf.py; sphinx-apidoc "
+                              "cd docs; cp Makefile.gh_pages Makefile; sphinx-apidoc "
                               " -o ./ -f -A 'PyCBC dev team' -V '0.1' ../pycbc && make html",
                             stderr=subprocess.STDOUT, shell=True)
 
@@ -208,15 +210,24 @@ cythonext = ['waveform.spa_tmplt',
              'filter.matchedfilter',
              'vetoes.chisq']
 ext = []
-cython_compile_args = ['-O3', '-w', '-msse4.2', '-ffast-math',
+cython_compile_args = ['-O3', '-w', '-ffast-math',
                        '-ffinite-math-only']
+
+if platform.machine() == 'x86_64':
+    cython_compile_args.append('-msse4.2')
 cython_link_args = []
+
 # Mac's clang compiler doesn't have openMP support by default. Therefore
 # disable openmp builds on MacOSX. Optimization should never really be a
 # concern on that OS, and this line can be commented out if needed anyway.
+# Mac's also alias gcc and can run into troubles getting libc correctly
 if not sys.platform == 'darwin':
     cython_compile_args += ['-fopenmp']
     cython_link_args += ['-fopenmp']
+else:
+    cython_compile_args += ["-stdlib=libc++"]
+    cython_link_args += ["-stdlib=libc++"]
+
 for name in cythonext:
     e = Extension("pycbc.%s_cpu" % name,
                   ["pycbc/%s_cpu.pyx" % name.replace('.', '/')],
@@ -234,6 +245,27 @@ e = Extension("pycbc.fft.fftw_pruned_cython",
 ext.append(e)
 e = Extension("pycbc.events.eventmgr_cython",
               ["pycbc/events/eventmgr_cython.pyx"],
+              extra_compile_args=cython_compile_args,
+              extra_link_args=cython_link_args,
+              compiler_directives={'embedsignature': True})
+ext.append(e)
+e = Extension("pycbc.events.simd_threshold_cython",
+              ["pycbc/events/simd_threshold_cython.pyx"],
+              language='c++',
+              extra_compile_args=cython_compile_args,
+              extra_link_args=cython_link_args,
+              compiler_directives={'embedsignature': True})
+ext.append(e)
+e = Extension("pycbc.filter.simd_correlate_cython",
+              ["pycbc/filter/simd_correlate_cython.pyx"],
+              language='c++',
+              extra_compile_args=cython_compile_args,
+              extra_link_args=cython_link_args,
+              compiler_directives={'embedsignature': True})
+ext.append(e)
+e = Extension("pycbc.waveform.decompress_cpu_cython",
+              ["pycbc/waveform/decompress_cpu_cython.pyx"],
+              language='c++',
               extra_compile_args=cython_compile_args,
               extra_link_args=cython_link_args,
               compiler_directives={'embedsignature': True})

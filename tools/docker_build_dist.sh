@@ -51,18 +51,17 @@ if [ "x${PYCBC_CONTAINER}" == "xpycbc_rhel_virtualenv" ]; then
   curl http://download.pegasus.isi.edu/wms/download/rhel/7/pegasus.repo > /etc/yum.repos.d/pegasus.repo
   yum clean all
   yum makecache
-  yum -y update
   yum -y install openssl-devel openssl-static
   yum -y install pegasus
   yum -y install ligo-proxy-utils
   yum -y install ecp-cookie-init
-  yum -y install hdf5-static libxml2-static zlib-static libstdc++-static cfitsio-static glibc-static fftw-static gsl-static
+  yum -y install python-virtualenv
+  yum -y install hdf5-static libxml2-static zlib-static libstdc++-static cfitsio-static glibc-static fftw-static gsl-static --skip-broken
 
   CVMFS_PATH=/cvmfs/oasis.opensciencegrid.org/ligo/sw/pycbc/${ENV_OS}/virtualenv
   mkdir -p ${CVMFS_PATH}
 
   VENV_PATH=${CVMFS_PATH}/pycbc-${TRAVIS_TAG}
-  pip install virtualenv
   virtualenv ${VENV_PATH}
   echo 'export PYTHONUSERBASE=${VIRTUAL_ENV}/.local' >> ${VENV_PATH}/bin/activate
   echo "export XDG_CACHE_HOME=\${HOME}/cvmfs-pycbc-${TRAVIS_TAG}/.cache" >> ${VENV_PATH}/bin/activate
@@ -84,12 +83,7 @@ if [ "x${PYCBC_CONTAINER}" == "xpycbc_rhel_virtualenv" ]; then
   pip install .
 
   echo -e "\\n>> [`date`] Installing ipython and jupyter"
-  pip install ipython
   pip install jupyter
-  pip install hide_code
-  jupyter nbextension install --sys-prefix --py hide_code
-  jupyter nbextension enable --sys-prefix --py hide_code
-  jupyter serverextension enable --sys-prefix --py hide_code
 
   cat << EOF >> $VIRTUAL_ENV/bin/activate
 
@@ -103,6 +97,9 @@ elif [ -f /opt/intel/2015/composer_xe_2015/mkl/bin/mklvars.sh ] ; then
 elif [ -f /ldcg/intel/2017u0/compilers_and_libraries_2017.0.098/linux/mkl/bin/mklvars.sh ] ; then
   # location on cit cluster
   . /ldcg/intel/2017u0/compilers_and_libraries_2017.0.098/linux/mkl/bin/mklvars.sh intel64
+elif [ -f /apps/compilers/intel/2019.3/compilers_and_libraries/linux/mkl/bin/mklvars.sh ] ; then
+  # location on ARCCA Hawk cluster
+  . /apps/compilers/intel/2019.3/compilers_and_libraries/linux/mkl/bin/mklvars.sh intel64
 fi
 
 # Use the ROM data from CVMFS

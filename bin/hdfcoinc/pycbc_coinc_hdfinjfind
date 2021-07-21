@@ -69,8 +69,8 @@ parser.add_argument('--redshift-column', default=None,
                     help='Name of sim_inspiral column containing redshift. '
                     'Optional')
 parser.add_argument('--verbose', action='count')
-parser.add_argument('--ml-processed', action='store_true', default=None,
-                    help='If trig files are ML processed, [default=None]')
+parser.add_argument('--ml-processed', action='store_true',
+                    help='If trig files are ML processed')
 parser.add_argument('--output-file', required=True)
 args = parser.parse_args()
 
@@ -108,12 +108,6 @@ for trigger_file, injection_file in zip(args.trigger_files,
     stat = f['foreground/stat'][:]
     ifar_exc = f['foreground/ifar_exc'][:]
     fap_exc = f['foreground/fap_exc'][:]
-    if args.ml_processed:
-        p1 = f['foreground/p1'][:]
-        p1_GN = f['foreground/p1_GN'][:]
-        p2 = f['foreground/p2'][:]
-        p2_GN = f['foreground/p2_GN'][:]
-        probs = f['foreground/probs'][:]
     try:
         ifar = f['foreground/ifar'][:]
         fap = f['foreground/fap'][:]
@@ -126,10 +120,16 @@ for trigger_file, injection_file in zip(args.trigger_files,
         ifo_times = ()
         time_dict = {}
         trig_dict = {}
+        if args.ml_processed:
+            pcbc_dict = {}
+            pgn_dict = {}
         for ifo in ifo_list:
              ifo_times += (f['foreground/%s/time' % ifo][:],)
              time_dict[ifo] = f['foreground/%s/time' % ifo][:]
              trig_dict[ifo] = f['foreground/%s/trigger_id' % ifo][:]
+             if args.ml_processed:
+                 pcbc_dict[ifo] = f['foreground/%s/p_cbc' % ifo][:]
+                 pgn_dict[ifo] = f['foreground/%s/p_gn' % ifo][:]
         time = numpy.array([events.mean_if_greater_than_zero(vals)[0]
                                                    for vals in zip(*ifo_times)])
         # We will discard injections which cannot be associated with a
@@ -153,6 +153,12 @@ for trigger_file, injection_file in zip(args.trigger_files,
         ana_start = f['segments/coinc/start'][:]
         ana_end = f['segments/coinc/end'][:]
         time = 0.5 * (time1 + time2)
+        if args.ml_processed:
+            p1 = f['foreground/p1'][:]
+            p1_GN = f['foreground/p1_GN'][:]
+            p2 = f['foreground/p2'][:]
+            p2_GN = f['foreground/p2_GN'][:]
+            probs = f['foreground/probs'][:]
 
     time_sorting = time.argsort()
 
@@ -230,8 +236,15 @@ for trigger_file, injection_file in zip(args.trigger_files,
     # pick up optimal SNRs
     if multi_ifo_style:
         for ifo, column in args.optimal_snr_column.items():
+            optimal_snr_all = numpy.array(sim_table.get_column(column))
+            # As a single detector being vetoed won't veto all combinations,
+            # need to set optimal_snr of a vetoed ifo to zero in order
+            # to later calculate decisive optimal snr
+            iws, _ = indices_within_segments(inj_time, [args.veto_file], ifo=ifo,
+                                             segment_name=args.segment_name)
+            optimal_snr_all[iws] = 0
             hdf_append(fo, 'injections/optimal_snr_%s' % ifo,
-                       sim_table.get_column(column))
+                       optimal_snr_all)
     else:
         ifo_map = {f.attrs['detector_1']: 1,
                    f.attrs['detector_2']: 2}
@@ -252,14 +265,18 @@ for trigger_file, injection_file in zip(args.trigger_files,
 
     if multi_ifo_style:
         for key in f['segments'].keys():
-            if 'foreground' in key:
+            if 'foreground' in key or 'coinc' in key:
                 continue
             if key not in fo:
                 fo.create_group(key)
-            fo[key].attrs['pivot'] = f[key].attrs['pivot']
-            fo[key].attrs['fixed'] = f[key].attrs['fixed']
-            fo[key].attrs['foreground_time'] = f[key].attrs['foreground_time']
-            fo[key].attrs['foreground_time_exc'] = f[key].attrs['foreground_time_exc']
+            if key in f:
+                fkey = f[key]
+            else:
+                fkey = f
+            fo[key].attrs['pivot'] = fkey.attrs['pivot']
+            fo[key].attrs['fixed'] = fkey.attrs['fixed']
+            fo[key].attrs['foreground_time'] = fkey.attrs['foreground_time']
+            fo[key].attrs['foreground_time_exc'] = fkey.attrs['foreground_time_exc']
     else:
         fo.attrs['detector_1'] = f.attrs['detector_1']
         fo.attrs['detector_2'] = f.attrs['detector_2']
@@ -272,12 +289,6 @@ for trigger_file, injection_file in zip(args.trigger_files,
     hdf_append(fo, 'found/stat', stat[time_sorting][found_fore])
     hdf_append(fo, 'found/ifar_exc', ifar_exc[time_sorting][found_fore])
     hdf_append(fo, 'found/fap_exc', ifar_exc[time_sorting][found_fore])
-    if args.ml_processed:
-        hdf_append(fo, 'found/p1', p1[time_sorting][found_fore])
-        hdf_append(fo, 'found/p1_GN', p1_GN[time_sorting][found_fore])
-        hdf_append(fo, 'found/p2', p2[time_sorting][found_fore])
-        hdf_append(fo, 'found/p2_GN', p2_GN[time_sorting][found_fore])
-        hdf_append(fo, 'found/probs', probs[time_sorting][found_fore])
     if ifar is not None:
         hdf_append(fo, 'found/ifar', ifar[time_sorting][found_fore])
         hdf_append(fo, 'found/fap', fap[time_sorting][found_fore])
@@ -288,12 +299,6 @@ for trigger_file, injection_file in zip(args.trigger_files,
     hdf_append(fo, 'found_after_vetoes/stat', stat[time_sorting][found_fore_v])
     hdf_append(fo, 'found_after_vetoes/ifar_exc', ifar_exc[time_sorting][found_fore_v])
     hdf_append(fo, 'found_after_vetoes/fap_exc', fap_exc[time_sorting][found_fore_v])
-    if args.ml_processed:
-        hdf_append(fo, 'found_after_vetoes/p1', p1[time_sorting][found_fore_v])
-        hdf_append(fo, 'found_after_vetoes/p1_GN', p1_GN[time_sorting][found_fore_v])
-        hdf_append(fo, 'found_after_vetoes/p2', p2[time_sorting][found_fore_v])
-        hdf_append(fo, 'found_after_vetoes/p2_GN', p2_GN[time_sorting][found_fore_v])
-        hdf_append(fo, 'found_after_vetoes/probs', probs[time_sorting][found_fore_v])
     if ifar is not None:
         hdf_append(fo, 'found_after_vetoes/ifar', ifar[time_sorting][found_fore_v])
         hdf_append(fo, 'found_after_vetoes/fap', fap[time_sorting][found_fore_v])
@@ -307,6 +312,15 @@ for trigger_file, injection_file in zip(args.trigger_files,
                        time_dict[ifo][time_sorting][found_fore_v])
             hdf_append(fo, 'found_after_vetoes/%s/trigger_id' % ifo,
                        trig_dict[ifo][time_sorting][found_fore_v])
+            if args.ml_processed:
+                hdf_append(fo, 'found/%s/p_cbc' % ifo,
+                           pcbc_dict[ifo][time_sorting][found_fore])
+                hdf_append(fo, 'found/%s/p_gn' % ifo,
+                           pgn_dict[ifo][time_sorting][found_fore])
+                hdf_append(fo, 'found_after_vetoes/%s/p_cbc' % ifo,
+                           pcbc_dict[ifo][time_sorting][found_fore_v])
+                hdf_append(fo, 'found_after_vetoes/%s/p_gn' % ifo,
+                           pgn_dict[ifo][time_sorting][found_fore_v])
     else:
         hdf_append(fo, 'found/time1', time1[time_sorting][found_fore])
         hdf_append(fo, 'found/time2', time2[time_sorting][found_fore])
@@ -318,5 +332,16 @@ for trigger_file, injection_file in zip(args.trigger_files,
                    trig1[time_sorting][found_fore_v])
         hdf_append(fo, 'found_after_vetoes/trigger_id2',
                    trig2[time_sorting][found_fore_v])
+        if args.ml_processed:
+            hdf_append(fo, 'found/p1', p1[time_sorting][found_fore])
+            hdf_append(fo, 'found/p1_GN', p1_GN[time_sorting][found_fore])
+            hdf_append(fo, 'found/p2', p2[time_sorting][found_fore])
+            hdf_append(fo, 'found/p2_GN', p2_GN[time_sorting][found_fore])
+            hdf_append(fo, 'found/probs', probs[time_sorting][found_fore])
+            hdf_append(fo, 'found_after_vetoes/p1', p1[time_sorting][found_fore_v])
+            hdf_append(fo, 'found_after_vetoes/p1_GN', p1_GN[time_sorting][found_fore_v])
+            hdf_append(fo, 'found_after_vetoes/p2', p2[time_sorting][found_fore_v])
+            hdf_append(fo, 'found_after_vetoes/p2_GN', p2_GN[time_sorting][found_fore_v])
+            hdf_append(fo, 'found_after_vetoes/probs', probs[time_sorting][found_fore_v])
 
     injection_index += len(sim_table)
