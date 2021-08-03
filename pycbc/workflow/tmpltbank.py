@@ -40,7 +40,7 @@ from pycbc.workflow.jobsetup import select_tmpltbank_class, select_matchedfilter
 
 def setup_tmpltbank_workflow(workflow, science_segs, datafind_outs,
                              output_dir=None, psd_files=None, tags=None,
-                             return_format=None):
+                             return_format=None, omit_jobs=False):
     '''
     Setup template bank section of CBC workflow. This function is responsible
     for deciding which of the various template bank workflow generation
@@ -114,17 +114,17 @@ def setup_tmpltbank_workflow(workflow, science_segs, datafind_outs,
                                          datafind_outs, output_dir, tags=tags,
                                          link_to_matchedfltr=linkToMatchedfltr,
                                          compatibility_mode=compatibility_mode,
-                                         psd_files=psd_files)
+                                         psd_files=psd_files, omit_jobs=omit_jobs)
     elif tmpltbankMethod == "WORKFLOW_INDEPENDENT_IFOS_NODATA":
         logging.info("Adding template bank jobs to workflow.")
         tmplt_banks = setup_tmpltbank_without_frames(workflow, output_dir,
                                          tags=tags, independent_ifos=True,
-                                         psd_files=psd_files)
+                                         psd_files=psd_files, omit_jobs=omit_jobs)
     elif tmpltbankMethod == "WORKFLOW_NO_IFO_VARIATION_NODATA":
         logging.info("Adding template bank jobs to workflow.")
         tmplt_banks = setup_tmpltbank_without_frames(workflow, output_dir,
                                          tags=tags, independent_ifos=False,
-                                         psd_files=psd_files)
+                                         psd_files=psd_files, omit_jobs=omit_jobs)
     else:
         errMsg = "Template bank method not recognized. Must be either "
         errMsg += "PREGENERATED_BANK, WORKFLOW_INDEPENDENT_IFOS "
@@ -159,7 +159,7 @@ def setup_tmpltbank_dax_generated(workflow, science_segs, datafind_outs,
                                   output_dir, tags=None,
                                   link_to_matchedfltr=True,
                                   compatibility_mode=False,
-                                  psd_files=None):
+                                  psd_files=None, omit_jobs=False):
     '''
     Setup template bank jobs that are generated as part of the CBC workflow.
     This function will add numerous jobs to the CBC workflow using
@@ -251,12 +251,12 @@ def setup_tmpltbank_dax_generated(workflow, science_segs, datafind_outs,
                            science_segs[ifo], datafind_outs,
                            link_job_instance=link_job_instance,
                            allow_overlap=True,
-                           compatibility_mode=compatibility_mode)
+                           compatibility_mode=compatibility_mode, omit_jobs=omit_jobs)
     return tmplt_banks
 
 def setup_tmpltbank_without_frames(workflow, output_dir,
                                    tags=None, independent_ifos=False,
-                                   psd_files=None):
+                                   psd_files=None, omit_jobs=False):
     '''
     Setup CBC workflow to use a template bank (or banks) that are generated in
     the workflow, but do not use the data to estimate a PSD, and therefore do
@@ -324,7 +324,8 @@ def setup_tmpltbank_without_frames(workflow, output_dir,
                                                tags=tags,
                                                psd_files=psd_files)
         node = job_instance.create_nodata_node(fullSegment)
-        workflow.add_node(node)
+        if not omit_jobs:
+            workflow.add_node(node)
         tmplt_banks += node.output_files
 
     return tmplt_banks

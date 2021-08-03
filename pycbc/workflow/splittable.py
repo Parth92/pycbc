@@ -71,7 +71,7 @@ def select_splitfilejob_instance(curr_exe):
 
     return exe_class
 
-def setup_splittable_workflow(workflow, input_tables, out_dir=None, tags=None):
+def setup_splittable_workflow(workflow, input_tables, out_dir=None, tags=None, omit_jobs=False):
     '''
     This function aims to be the gateway for code that is responsible for taking
     some input file containing some table, and splitting into multiple files
@@ -105,7 +105,7 @@ def setup_splittable_workflow(workflow, input_tables, out_dir=None, tags=None):
         # Scope here for choosing different options
         logging.info("Adding split output file jobs to workflow.")
         split_table_outs = setup_splittable_dax_generated(workflow,
-                input_tables, out_dir, tags)
+                input_tables, out_dir, tags, omit_jobs=omit_jobs)
     elif splitMethod == "NOOP":
         # Probably better not to call the module at all, but this option will
         # return the input file list.
@@ -118,7 +118,7 @@ def setup_splittable_workflow(workflow, input_tables, out_dir=None, tags=None):
     logging.info("Leaving split output files module.")
     return split_table_outs
 
-def setup_splittable_dax_generated(workflow, input_tables, out_dir, tags):
+def setup_splittable_dax_generated(workflow, input_tables, out_dir, tags, omit_jobs=False):
     '''
     Function for setting up the splitting jobs as part of the workflow.
 
@@ -170,7 +170,8 @@ def setup_splittable_dax_generated(workflow, input_tables, out_dir, tags):
 
     for input in input_tables:
         node = curr_exe_job.create_node(input, tags=tags)
-        workflow.add_node(node)
+        if not omit_jobs:
+            workflow.add_node(node)
         out_file_groups += node.output_files
     return out_file_groups
 

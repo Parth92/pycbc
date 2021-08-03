@@ -71,7 +71,7 @@ def make_template_plot(workflow, bank_file, out_dir, tags=None):
     return node.output_files[0]
 
 def make_range_plot(workflow, psd_files, out_dir, exclude=None, require=None,
-                   tags=None):
+                   tags=None, omit_jobs=False):
     tags = [] if tags is None else tags
     makedir(out_dir)
     secs = requirestr(workflow.cp.get_subsections('plot_range'), require)
@@ -82,12 +82,13 @@ def make_range_plot(workflow, psd_files, out_dir, exclude=None, require=None,
                               out_dir=out_dir, tags=[tag] + tags).create_node()
         node.add_input_list_opt('--psd-files', psd_files)
         node.new_output_file_opt(workflow.analysis_time, '.png', '--output-file')
-        workflow += node
+        if not omit_jobs:
+            workflow += node
         files += node.output_files
     return files
 
 def make_spectrum_plot(workflow, psd_files, out_dir, tags=None,
-                       hdf_group=None, precalc_psd_files=None):
+                       hdf_group=None, precalc_psd_files=None, omit_jobs=False):
     tags = [] if tags is None else tags
     makedir(out_dir)
     node = PlotExecutable(workflow.cp, 'plot_spectrum', ifos=workflow.ifos,
@@ -100,7 +101,8 @@ def make_spectrum_plot(workflow, psd_files, out_dir, tags=None,
     if precalc_psd_files is not None and len(precalc_psd_files) == 1:
         node.add_input_list_opt('--psd-file', precalc_psd_files)
 
-    workflow += node
+    if not omit_jobs:
+        workflow += node
     return node.output_files[0]
 
 def make_segments_plot(workflow, seg_files, out_dir, tags=None):
@@ -426,7 +428,7 @@ def make_results_web_page(workflow, results_dir, explicit_dependencies=None):
 
 def make_single_hist(workflow, trig_file, veto_file, veto_name,
                      out_dir, bank_file=None, exclude=None,
-                     require=None, tags=None):
+                     require=None, tags=None, omit_jobs=False):
     tags = [] if tags is None else tags
     makedir(out_dir)
     secs = requirestr(workflow.cp.get_subsections('plot_hist'), require)
@@ -444,13 +446,14 @@ def make_single_hist(workflow, trig_file, veto_file, veto_name,
         if bank_file:
             node.add_input_opt('--bank-file', bank_file)
         node.new_output_file_opt(trig_file.segment, '.png', '--output-file')
-        workflow += node
+        if not omit_jobs:
+            workflow += node
         files += node.output_files
     return files
 
 def make_binned_hist(workflow, trig_file, veto_file, veto_name,
                      out_dir, bank_file, exclude=None,
-                     require=None, tags=None):
+                     require=None, tags=None, omit_jobs=False):
     tags = [] if tags is None else tags
     makedir(out_dir)
     secs = requirestr(workflow.cp.get_subsections('plot_binnedhist'), require)
@@ -468,12 +471,13 @@ def make_binned_hist(workflow, trig_file, veto_file, veto_name,
         node.add_input_opt('--trigger-file', trig_file)
         node.add_input_opt('--bank-file', bank_file)
         node.new_output_file_opt(trig_file.segment, '.png', '--output-file')
-        workflow += node
+        if not omit_jobs:
+            workflow += node
         files += node.output_files
     return files
 
 def make_singles_plot(workflow, trig_files, bank_file, veto_file, veto_name,
-                     out_dir, exclude=None, require=None, tags=None):
+                     out_dir, exclude=None, require=None, tags=None, omit_jobs=False):
     tags = [] if tags is None else tags
     makedir(out_dir)
     secs = requirestr(workflow.cp.get_subsections('plot_singles'), require)
@@ -494,6 +498,7 @@ def make_singles_plot(workflow, trig_files, bank_file, veto_file, veto_name,
             node.add_opt('--detector', trig_file.ifo)
             node.add_input_opt('--single-trig-file', trig_file)
             node.new_output_file_opt(trig_file.segment, '.png', '--output-file')
-            workflow += node
+            if not omit_jobs:
+                workflow += node
             files += node.output_files
     return files

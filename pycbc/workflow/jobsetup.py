@@ -179,7 +179,7 @@ def select_generic_executable(workflow, exe_tag):
 def sngl_ifo_job_setup(workflow, ifo, out_files, curr_exe_job, science_segs,
                        datafind_outs, parents=None,
                        link_job_instance=None, allow_overlap=True,
-                       compatibility_mode=True):
+                       compatibility_mode=True, omit_jobs=False):
     """ This function sets up a set of single ifo jobs. A basic overview of how this
     works is as follows:
 
@@ -311,7 +311,8 @@ def sngl_ifo_job_setup(workflow, ifo, out_files, curr_exe_job, science_segs,
                                                 parent=parent,
                                                 dfParents=curr_dfouts,
                                                 tags=tag)
-                workflow.add_node(node)
+                if not omit_jobs:
+                    workflow.add_node(node)
                 curr_out_files = node.output_files
                 # FIXME: Here we remove PSD files if they are coming through.
                 #        This should be done in a better way. On to-do list.
@@ -323,7 +324,7 @@ def sngl_ifo_job_setup(workflow, ifo, out_files, curr_exe_job, science_segs,
 
 def multi_ifo_coherent_job_setup(workflow, out_files, curr_exe_job,
                                  science_segs, datafind_outs, output_dir,
-                                 parents=None, slide_dict=None, tags=None):
+                                 parents=None, slide_dict=None, tags=None, omit_jobs=False):
     """
     Method for setting up coherent inspiral jobs.
     """
@@ -351,7 +352,8 @@ def multi_ifo_coherent_job_setup(workflow, out_files, curr_exe_job,
                     parent=split_bank, dfParents=frame_files,
                     bankVetoBank=bank_veto, ipn_file=ipn_sky_points,
                     slide=slide_dict, tags=tag)
-            workflow.add_node(node)
+            if not omit_jobs:
+                workflow.add_node(node)
             split_bank_counter += 1
             curr_out_files.extend(node.output_files)
     else:
@@ -364,7 +366,8 @@ def multi_ifo_coherent_job_setup(workflow, out_files, curr_exe_job,
                         parent=split_bank, inj_file=inj_file, tags=tag,
                         dfParents=frame_files, bankVetoBank=bank_veto,
                         ipn_file=ipn_sky_points)
-                workflow.add_node(node)
+                if not omit_jobs:
+                    workflow.add_node(node)
                 split_bank_counter += 1
                 curr_out_files.extend(node.output_files)
 

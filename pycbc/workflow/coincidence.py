@@ -323,7 +323,7 @@ def make_foreground_censored_veto(workflow, bg_file, veto_file, veto_name,
     workflow += node
     return node.output_files[0]
 
-def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir, tags=None):
+def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir, tags=None, omit_jobs=False):
     if tags is None:
         tags = []
     make_analysis_dir(out_dir)
@@ -334,12 +334,13 @@ def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir,
         node.add_input_opt('--bank-file', bank_file)
         node.add_input_list_opt('--trigger-files', trigger_files.find_output_with_ifo(ifo))
         node.new_output_file_opt(workflow.analysis_time, '.hdf', '--output-file')
-        workflow += node
+        if not omit_jobs:
+            workflow += node
         out += node.output_files
     return out
 
 def setup_trigger_fitting(workflow, insps, hdfbank, veto_file, veto_name,
-                          output_dir=None, tags=None):
+                          output_dir=None, tags=None, omit_jobs=False):
     if not workflow.cp.has_option('workflow-coincidence', 'do-trigger-fitting'):
         return FileList()
     else:
@@ -354,14 +355,16 @@ def setup_trigger_fitting(workflow, insps, hdfbank, veto_file, veto_name,
                                                    tags=tags)
             raw_node = raw_exe.create_node(ifo_insp, hdfbank,
                                            veto_file, veto_name)
-            workflow += raw_node
+            if not omit_jobs:
+                workflow += raw_node
             smooth_exe = PyCBCFitOverParamExecutable(workflow.cp,
                                                      'fit_over_param', ifos=i,
                                                      out_dir=output_dir,
                                                      tags=tags)
             smooth_node = smooth_exe.create_node(raw_node.output_file,
                                                  hdfbank)
-            workflow += smooth_node
+            if not omit_jobs:
+                workflow += smooth_node
             smoothed_fit_files += smooth_node.output_files
         return smoothed_fit_files
 

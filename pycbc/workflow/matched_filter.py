@@ -39,7 +39,7 @@ from pycbc.workflow.jobsetup import (select_matchedfilter_class,
 
 def setup_matchedfltr_workflow(workflow, science_segs, datafind_outs,
                                tmplt_banks, output_dir=None,
-                               injection_file=None, tags=None):
+                               injection_file=None, tags=None, omit_jobs=False):
     '''
     This function aims to be the gateway for setting up a set of matched-filter
     jobs in a workflow. This function is intended to support multiple
@@ -122,13 +122,13 @@ def setup_matchedfltr_workflow(workflow, science_segs, datafind_outs,
                                       injection_file=injection_file,
                                       tags=tags,
                                       link_to_tmpltbank=linkToTmpltbank,
-                                      compatibility_mode=compatibility_mode)
+                                      compatibility_mode=compatibility_mode, omit_jobs=omit_jobs)
     elif mfltrMethod == "WORKFLOW_MULTIPLE_IFOS":
         logging.info("Adding matched-filter jobs to workflow.")
         inspiral_outs = setup_matchedfltr_dax_generated_multi(workflow,
                                       science_segs, datafind_outs, tmplt_banks,
                                       output_dir, injection_file=injection_file,
-                                      tags=tags)
+                                      tags=tags, omit_jobs=omit_jobs)
     else:
         errMsg = "Matched filter method not recognized. Must be one of "
         errMsg += "WORKFLOW_INDEPENDENT_IFOS (currently only one option)."
@@ -141,7 +141,7 @@ def setup_matchedfltr_dax_generated(workflow, science_segs, datafind_outs,
                                     tmplt_banks, output_dir,
                                     injection_file=None,
                                     tags=None, link_to_tmpltbank=False,
-                                    compatibility_mode=False):
+                                    compatibility_mode=False, omit_jobs=False):
     '''
     Setup matched-filter jobs that are generated as part of the workflow.
     This
@@ -232,14 +232,14 @@ def setup_matchedfltr_dax_generated(workflow, science_segs, datafind_outs,
                            science_segs[ifo], datafind_outs,
                            parents=tmplt_banks, allow_overlap=False,
                            link_job_instance=link_job_instance,
-                           compatibility_mode=compatibility_mode)
+                           compatibility_mode=compatibility_mode, omit_jobs=omit_jobs)
     return inspiral_outs
 
 def setup_matchedfltr_dax_generated_multi(workflow, science_segs, datafind_outs,
                                           tmplt_banks, output_dir,
                                           injection_file=None,
                                           tags=None, link_to_tmpltbank=False,
-                                          compatibility_mode=False):
+                                          compatibility_mode=False, omit_jobs=False):
     '''
     Setup matched-filter jobs that are generated as part of the workflow in
     which a single job reads in and generates triggers over multiple ifos.
@@ -332,11 +332,11 @@ def setup_matchedfltr_dax_generated_multi(workflow, science_segs, datafind_outs,
             multi_ifo_coherent_job_setup(workflow, inspiral_outs, job_instance,
                                          science_segs, datafind_outs,
                                          output_dir, parents=tmplt_banks,
-                                         slide_dict=time_slide_dict)
+                                         slide_dict=time_slide_dict, omit_jobs=omit_jobs)
         else:
             multi_ifo_coherent_job_setup(workflow, inspiral_outs, job_instance,
                                          science_segs, datafind_outs,
-                                         output_dir, parents=tmplt_banks)
+                                         output_dir, parents=tmplt_banks, omit_jobs=omit_jobs)
     else:
         # Select the appropriate class
         raise ValueError("Not currently supported.")

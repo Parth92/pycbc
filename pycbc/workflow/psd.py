@@ -37,7 +37,7 @@ def chunks(l, n):
         yield l[i*newn:i*newn+newn]
     yield l[n*newn-newn:]
 
-def merge_psds(workflow, files, ifo, out_dir, tags=None):
+def merge_psds(workflow, files, ifo, out_dir, tags=None, omit_jobs=False):
     make_analysis_dir(out_dir)
     tags = [] if not tags else tags
     node = MergePSDFiles(workflow.cp, 'merge_psds',
@@ -45,11 +45,12 @@ def merge_psds(workflow, files, ifo, out_dir, tags=None):
                          tags=tags).create_node()
     node.add_input_list_opt('--psd-files', files)
     node.new_output_file_opt(workflow.analysis_time, '.hdf', '--output-file')
-    workflow += node
+    if not omit_jobs:
+        workflow += node
     return node.output_files[0]
 
 def setup_psd_calculate(workflow, frame_files, ifo, segments,
-                        segment_name, out_dir, tags=None):
+                        segment_name, out_dir, tags=None, omit_jobs=False):
     make_analysis_dir(out_dir)
     tags = [] if not tags else tags
     if workflow.cp.has_option_tags('workflow-psd', 'parallelization-factor', tags=tags):
@@ -73,15 +74,15 @@ def setup_psd_calculate(workflow, frame_files, ifo, segments,
 
         psd_files += [make_psd_file(workflow, frame_files, seg_file,
                                     segment_name, out_dir,
-                                    tags=tags + ['PART%s' % i])]
+                                    tags=tags + ['PART%s' % i]), omit_jobs=omit_jobs]
 
     if num_parts > 1:
-        return merge_psds(workflow, psd_files, ifo, out_dir, tags=tags)
+        return merge_psds(workflow, psd_files, ifo, out_dir, tags=tags, omit_jobs=omit_jobs)
     else:
         return psd_files[0]
 
 def make_psd_file(workflow, frame_files, segment_file, segment_name, out_dir,
-                  tags=None):
+                  tags=None, omit_jobs=False):
     make_analysis_dir(out_dir)
     tags = [] if not tags else tags
     exe = CalcPSDExecutable(workflow.cp, 'calculate_psd',
@@ -95,7 +96,8 @@ def make_psd_file(workflow, frame_files, segment_file, segment_name, out_dir,
         node.add_input_list_opt('--frame-files', frame_files)
 
     node.new_output_file_opt(workflow.analysis_time, '.hdf', '--output-file')
-    workflow += node
+    if not omit_jobs:
+        workflow += node
     return node.output_files[0]
 
 class AvgPSDExecutable(Executable):
