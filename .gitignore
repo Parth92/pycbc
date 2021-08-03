@@ -1,8 +1,10 @@
+*.cpp
 *.c
 *.~
 *.so
 .DS_Store
 *.log
+.eggs/
 dist/
 html/
 pycbc_inspiralc
