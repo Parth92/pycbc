@@ -38,7 +38,7 @@ def grouper(iterable, n, fillvalue=None):
 
 def setup_foreground_minifollowups(workflow, coinc_file, single_triggers,
                        tmpltbank_file, insp_segs, insp_data_name,
-                       insp_anal_name, dax_output, out_dir, tags=None):
+                       insp_anal_name, dax_output, out_dir, tags=None, omit_jobs=False):
     """ Create plots that followup the Nth loudest coincident injection
     from a statmap produced HDF file.
 
@@ -113,7 +113,8 @@ def setup_foreground_minifollowups(workflow, coinc_file, single_triggers,
     node.add_opt('--workflow-name', name)
     node.add_opt('--output-dir', out_dir)
 
-    workflow += node
+    if not omit_jobs:
+        workflow += node
 
     # execute this in a sub-workflow
     fil = node.output_files[0]
@@ -128,16 +129,18 @@ def setup_foreground_minifollowups(workflow, coinc_file, single_triggers,
     job = dax.DAX(fil)
     job.addArguments('--basename %s' % os.path.splitext(os.path.basename(name))[0])
     Workflow.set_job_properties(job, map_file, tc_file, staging_site=staging_site)
-    workflow._adag.addJob(job)
+    if not omit_jobs:
+        workflow._adag.addJob(job)
     dep = dax.Dependency(parent=node._dax_node, child=job)
-    workflow._adag.addDependency(dep)
+    if not omit_jobs:
+        workflow._adag.addDependency(dep)
     logging.info('Leaving minifollowups module')
 
 def setup_single_det_minifollowups(workflow, single_trig_file, tmpltbank_file,
                                    insp_segs, insp_data_name, insp_anal_name,
                                    dax_output, out_dir, veto_file=None,
                                    veto_segment_name=None, statfiles=None,
-                                   tags=None):
+                                   tags=None, omit_jobs=False):
     """ Create plots that followup the Nth loudest clustered single detector
     triggers from a merged single detector trigger HDF file.
 
@@ -223,7 +226,8 @@ def setup_single_det_minifollowups(workflow, single_trig_file, tmpltbank_file,
     node.add_opt('--workflow-name', name)
     node.add_opt('--output-dir', out_dir)
 
-    workflow += node
+    if not omit_jobs:
+        workflow += node
 
     # execute this in a sub-workflow
     fil = node.output_files[0]
@@ -240,16 +244,18 @@ def setup_single_det_minifollowups(workflow, single_trig_file, tmpltbank_file,
                      % os.path.splitext(os.path.basename(name))[0])
     Workflow.set_job_properties(job, map_file, tc_file,
                                 staging_site=staging_site)
-    workflow._adag.addJob(job)
+    if not omit_jobs:
+        workflow._adag.addJob(job)
     dep = dax.Dependency(parent=node._dax_node, child=job)
-    workflow._adag.addDependency(dep)
+    if not omit_jobs:
+        workflow._adag.addDependency(dep)
     logging.info('Leaving minifollowups module')
 
 
 def setup_injection_minifollowups(workflow, injection_file, inj_xml_file,
                                   single_triggers, tmpltbank_file,
                                   insp_segs, insp_data_name, insp_anal_name,
-                                  dax_output, out_dir, tags=None):
+                                  dax_output, out_dir, tags=None, omit_jobs=False):
     """ Create plots that followup the closest missed injections
 
     Parameters
@@ -318,7 +324,8 @@ def setup_injection_minifollowups(workflow, injection_file, inj_xml_file,
     node.add_opt('--workflow-name', name)
     node.add_opt('--output-dir', out_dir)
 
-    workflow += node
+    if not omit_jobs:
+        workflow += node
 
     # execute this in a sub-workflow
     fil = node.output_files[0]
@@ -333,9 +340,11 @@ def setup_injection_minifollowups(workflow, injection_file, inj_xml_file,
     job = dax.DAX(fil)
     job.addArguments('--basename %s' % os.path.splitext(os.path.basename(name))[0])
     Workflow.set_job_properties(job, map_file, tc_file, staging_site=staging_site)
-    workflow._adag.addJob(job)
+    if not omit_jobs:
+        workflow._adag.addJob(job)
     dep = dax.Dependency(parent=node._dax_node, child=job)
-    workflow._adag.addDependency(dep)
+    if not omit_jobs:
+        workflow._adag.addDependency(dep)
     logging.info('Leaving injection minifollowups module')
 
 
