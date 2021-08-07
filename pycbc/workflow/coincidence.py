@@ -30,7 +30,7 @@ https://ldas-jobs.ligo.caltech.edu/~cbc/docs/pycbc/coincidence.html
 import os
 import logging
 from ligo import segments
-from pycbc.workflow.core import FileList, make_analysis_dir, Executable, Node, File
+from pycbc.workflow.core import FileList, make_analysis_dir, Executable, Node, File, resolve_url_to_file
 
 class PyCBCBank2HDFExecutable(Executable):
     """Converts xml tmpltbank to hdf format"""
@@ -328,13 +328,34 @@ def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir,
         tags = []
     make_analysis_dir(out_dir)
     out = FileList()
+
+    if omit_jobs:
+        mergetrig_outfiles = FileList([])
+        file_attrs = {'segs' : workflow.analysis_time, 'tags' : tags}
+        mergetrigpaths = workflow.cp.get_opt_tags('multiifo_coinc', 'trigger-files', tags).split(' ')
+        # allowing only 2 or 3 ifos
+        assert len(mergetrigpaths) == 2 or len(mergetrigpaths) == 3
+        for mergetrigpath in mergetrigpaths:
+            if 'H1' in mergetrigpath:
+                file_attrs['ifos'] = ['H1']
+            elif 'L1' in mergetrigpath:
+                file_attrs['ifos'] = ['L1']
+            elif 'V1' in mergetrigpath:
+                file_attrs['ifos'] = ['V1']
+
+            curr_file = resolve_url_to_file(mergetrigpath, attrs=file_attrs)
+            # print('found trig file: '+mergetrigpath)
+            mergetrig_outfiles.append(curr_file)
+
     for ifo in workflow.ifos:
         node = MergeExecutable(workflow.cp, 'hdf_trigger_merge',
                         ifos=ifo, out_dir=out_dir, tags=tags).create_node()
         node.add_input_opt('--bank-file', bank_file)
         node.add_input_list_opt('--trigger-files', trigger_files.find_output_with_ifo(ifo))
-        node.new_output_file_opt(workflow.analysis_time, '.hdf', '--output-file')
-        if not omit_jobs:
+        if omit_jobs:
+            node.add_output_opt('--output-file', mergetrig_outfiles.find_output_with_ifo(ifo))
+        else:
+            node.new_output_file_opt(workflow.analysis_time, '.hdf', '--output-file')
             workflow += node
         out += node.output_files
     return out
