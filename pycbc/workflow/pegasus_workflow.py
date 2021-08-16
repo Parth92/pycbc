@@ -381,7 +381,7 @@ class Workflow(object):
 
             elif inp.node is not None and not inp.node.in_workflow:
                 # MLStat change
-                print('WARNING: Parents of this node not present in the workflow..\nfull command line is - \n'+'\n'.join(inp.node.get_command_line()))
+                # print('WARNING: Parents of this node not present in the workflow..\nfull command line is - \n'+'\n'.join(inp.node.get_command_line()))
                 # raise ValueError('Parents of this node must be added to the '
                 #                  'workflow first.')
 
