@@ -353,7 +353,7 @@ def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir,
         node.add_input_opt('--bank-file', bank_file)
         node.add_input_list_opt('--trigger-files', trigger_files.find_output_with_ifo(ifo))
         if omit_jobs:
-            node.add_output_opt('--output-file', mergetrig_outfiles.find_output_with_ifo(ifo))
+            node.add_output_opt('--output-file', mergetrig_outfiles.find_output_with_ifo(ifo)[0])
         else:
             node.new_output_file_opt(workflow.analysis_time, '.hdf', '--output-file')
             workflow += node
