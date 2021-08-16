@@ -332,7 +332,7 @@ def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir,
     if omit_jobs:
         mergetrig_outfiles = FileList([])
         file_attrs = {'segs' : workflow.analysis_time, 'tags' : tags}
-        mergetrigpaths = workflow.cp.get_opt_tags('multiifo_coinc', 'trigger-files', tags).split(' ')
+        mergetrigpaths = workflow.cp.get_opt_tags('hdf_trigger_merge', 'output-files', tags).split(' ')
         # allowing only 2 or 3 ifos
         assert len(mergetrigpaths) == 2 or len(mergetrigpaths) == 3
         for mergetrigpath in mergetrigpaths:
