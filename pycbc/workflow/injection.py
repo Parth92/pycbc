@@ -67,7 +67,7 @@ class PyCBCOptimalSNRExecutable(Executable):
 
 
 def compute_inj_optimal_snr(workflow, inj_file, precalc_psd_files, out_dir,
-                            tags=None):
+                            tags=None, omit_jobs=False):
     "Set up a job for computing optimal SNRs of a sim_inspiral file."
     if tags is None:
         tags = []
@@ -86,7 +86,8 @@ def compute_inj_optimal_snr(workflow, inj_file, precalc_psd_files, out_dir,
                                                 out_dir=out_dir, tags=tags)
         node = opt_snr_exe.create_node(workflow, inj_file,
                                        precalc_psd_files, '0/1')
-        workflow += node
+        if not omit_jobs:
+            workflow += node
 
         return node.output_files[0]
 
@@ -102,7 +103,8 @@ def compute_inj_optimal_snr(workflow, inj_file, precalc_psd_files, out_dir,
         node = opt_snr_exe.create_node(workflow, inj_file, precalc_psd_files,
                                        group_str)
         opt_snr_split_files += [node.output_files[0]]
-        workflow += node
+        if not omit_jobs:
+            workflow += node
 
     llwadd_exe = LigolwAddExecutable(workflow.cp, 'optimal_snr_merge',
                                      ifos=workflow.ifos, out_dir=out_dir,
@@ -111,7 +113,8 @@ def compute_inj_optimal_snr(workflow, inj_file, precalc_psd_files, out_dir,
     merge_node = llwadd_exe.create_node(workflow.analysis_time,
                                         opt_snr_split_files,
                                         use_tmp_subdirs=False)
-    workflow += merge_node
+    if not omit_jobs:
+        workflow += merge_node
 
     return merge_node.output_files[0]
 
