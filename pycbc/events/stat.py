@@ -1674,6 +1674,43 @@ class MLStatistic_ExpFitSGPSDFgBgNormStatistic(ExpFitSGPSDFgBgNormStatistic):
         return p_cbc_c
 
 
+class MLStatistic_PhaseTDExpFitSGStatistic(PhaseTDExpFitSGStatistic):
+    def __init__(self, files=None, ifos=None, **kwargs):
+        PhaseTDExpFitSGStatistic.__init__(self, files=files, ifos=ifos,
+                                          **kwargs)
+        self.single_dtype.append(('p_cbc', numpy.float32))
+        self.single_dtype.append(('p_gn', numpy.float32))
+
+    def single(self, trigs):
+        singles = PhaseTDExpFitSGStatistic.single(self, trigs)
+        singles['p_cbc'] = trigs['p_cbc'][:]
+        singles['p_gn'] = trigs['p_gn'][:]
+        return numpy.array(singles, ndmin=1)
+
+    # def coinc(self, s0, s1, slide, step):
+    #     # logsignalrate function inherited from PhaseTDStatistic
+    #     logr_s = self.logsignalrate(s0, s1, slide * step)
+    #     # rescale by ExpFitCombinedSNR reference slope as for sngl stat
+    #     cstat = s0['snglstat'] + s1['snglstat'] + (logr_s + numpy.log(self.coinc_prob(s0, s1))) / self.alpharef
+    #     # cut off underflowing and very small values
+    #     cstat[cstat < 0.] = 0.
+    #     # scale to resemble network SNR
+    #     return cstat / (2.**0.5)
+
+    def coinc(self, s0, s1, slide, step):
+        rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
+        cstat = rstat**2. + 2. * numpy.log(s0['probs'] * s1['probs'])
+        cstat[cstat < 0] = 0
+        return cstat ** 0.5
+
+    def coinc_prob(self, s0, s1):
+        """
+        Return p_cbc_combined
+        """
+        p_cbc_c = s0['p_cbc'] * s1['p_cbc']
+        return p_cbc_c
+
+
 statistic_dict = {
     'newsnr': NewSNRStatistic,
     'network_snr': NetworkSNRStatistic,
@@ -1703,6 +1740,7 @@ statistic_dict = {
     'exp_fit_sg_fgbg_norm_psdvar_bbh': ExpFitSGPSDFgBgNormBBHStatistic,
     'exp_fit_sg_fgbg_norm_psdvar_bbh_thresh':
         ExpFitSGPSDFgBgNormBBHThreshStatistic,
+    'ml_stat_phasetd_exp_fit_stat_sgveto': MLStatistic_PhaseTDExpFitSGStatistic,
     'ml_stat_exp_fit_sg_fgbg_norm_psdvar': MLStatistic_ExpFitSGPSDFgBgNormStatistic
 }
 
