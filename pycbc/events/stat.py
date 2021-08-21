@@ -1699,7 +1699,7 @@ class MLStatistic_PhaseTDExpFitSGStatistic(PhaseTDExpFitSGStatistic):
 
     def coinc(self, s0, s1, slide, step):
         rstat = PhaseTDExpFitSGStatistic.coinc(self, s0, s1, slide, step)
-        cstat = rstat**2. + 2. * numpy.log(s0['probs'] * s1['probs'])
+        cstat = rstat**2. + 2. * numpy.log(s0['p_cbc'] * s1['p_cbc'])
         cstat[cstat < 0] = 0
         return cstat ** 0.5
 
