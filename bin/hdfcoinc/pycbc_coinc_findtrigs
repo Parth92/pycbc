@@ -235,11 +235,11 @@ if args.ranking_statistic[:2] == 'ml':
             'trigger_id2': [],
             'timeslide_id': [],
             'template_id': [],
-            'probs': [],
-            'p1': [],
-            'p2': [],
-            'p1_GN': [],
-            'p2_GN': []
+            'p_cbc_c': [],
+            'pcbc1': [],
+            'pcbc2': [],
+            'p_gn1': [],
+            'p_gn2': []
     }
 else:
     data = {'stat': [],
@@ -287,11 +287,10 @@ for tnum in template_ids:
     t1g = trigs1['end_time']
     ##### MLStat change #####
     if args.ranking_statistic[:2] == 'ml':
-        p0g = trigs0['probs']
-        p1g = trigs1['probs']
-        pgn0g = trigs0['probs_GN']
-        pgn1g = trigs1['probs_GN']
-        
+        p0g = trigs0['p_cbc']
+        p1g = trigs1['p_cbc']
+        pgn0g = trigs0['p_gn']
+        pgn1g = trigs1['p_gn']
 
     ##### MLStat change #####
     if args.ranking_statistic.startswith('ml_alt_stat'):
@@ -369,8 +368,8 @@ for tnum in template_ids:
             t1 = t1g[s1gid]
             ##### MLStat change #####
             if args.ranking_statistic[:2] == 'ml':
-                p1 = p1g[s0gid]
-                pgn1 = pgn1g[s0gid]
+                p1 = p1g[s1gid]
+                pgn1 = pgn1g[s1gid]
 
             # Do time coincidence for slides that will be kept after all decimation
             curr_shift = args.timeslide_interval * total_factors[-1]
@@ -429,7 +428,7 @@ for tnum in template_ids:
             # loop through decimation steps starting from the first step where passing
             # the threshold is possible
             for kidx in range(tidx, len(threshes)):
-                
+
                 # Remove triggers in detector 1 that cannot form coincidences above
                 # the current decimation threshold
                 s1cut = numpy.searchsorted(s1stat, s1lower[kidx])
@@ -474,11 +473,11 @@ for tnum in template_ids:
 
             ##### MLStat change #####
             if args.ranking_statistic[:2] == 'ml':
-                data['probs'] += [cp]
-                data['p1'] += [p0[i0]]
-                data['p2'] += [p1[i1]]
-                data['p1_GN'] += [pgn0[i0]]
-                data['p2_GN'] += [pgn1[i1]]
+                data['p_cbc_c'] += [cp]
+                data['pcbc1'] += [p0[i0]]
+                data['pcbc2'] += [p1[i1]]
+                data['p_gn1'] += [pgn0[i0]]
+                data['p_gn2'] += [pgn1[i1]]
 
             data['stat'] += [c]
             data['decimation_factor'] += [dec]
