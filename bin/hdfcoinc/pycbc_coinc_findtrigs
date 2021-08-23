@@ -57,7 +57,7 @@ parser.add_argument("--restrict-mass-range-below", type=float, default=None,
                     help="Limit the coinc search to only the triggers with chirpmass below a certain value")
 parser.add_argument('--restrict-mass-range-to-training', action='store_true', default=None,
                     help='Limit the coinc search to only the triggers lying within training range (2 <= m1,m2 <= 98 & Mtot <= 100), [default=None]')
-args = parser.parse_args()
+args = parser.parse_args(['--coinc-threshold', '0.002', '--strict-coinc-time', '--ranking-statistic', 'ml_stat_phasetd_exp_fit_stat_sgveto', '--timeslide-interval', '0.1', '--loudest-keep-values', '9:10', '8.5:30', '8:30', '7.5:30', '--template-bank', '/home/shreejit.jadhav/WORK/ML_Background_Reduction/Data/O3/C01/hl/a_8/bank/H1L1-BANK2HDF-1243161342-625572.hdf', '--trigger-files', '/home/shreejit.jadhav/WORK/ML_Background_Reduction/Data/O3/C01/hl/a_8/O3_CLEAN_C01_H1-MODIFIED-cp__2057__2021_04_19__21_29_29_trained-HDF_TRIGGER_MERGE_FULL_DATA-1243161342-625572.hdf', '/home/shreejit.jadhav/WORK/ML_Background_Reduction/Data/O3/C01/hl/a_8/O3_CLEAN_C01_L1-MODIFIED-cp__2057__2021_04_19__21_29_29_trained-HDF_TRIGGER_MERGE_FULL_DATA-1243161342-625572.hdf', '--statistic-files', '/home/shreejit.jadhav/WORK/ML_Background_Reduction/Data/fit_over_param/H1-FIT_OVER_PARAM-1243161342-625572.hdf', '/home/shreejit.jadhav/WORK/ML_Background_Reduction/Data/fit_over_param/L1-FIT_OVER_PARAM-1243161342-625572.hdf', '--veto-files', '/home/shreejit.jadhav/WORK/ML_Background_Reduction/Data/O3/C01/hl/a_8/results/1._analysis_time/1.01_segment_data/H1L1-VETOES-1243161342-625572.xml', '--segment-name', 'vetoes', '--template-fraction-range', '12/40', '--output-file', 'test.hdf', '--statistic-files', '/home/shreejit.jadhav/WORK/ML_Background_Reduction/Data/O3/C01/hl/a_8/H1L1-PHASE_TIME_AMP_v1.hdf'])
 
 # flatten the list of lists of filenames to a single list (may be empty)
 args.statistic_files = sum(args.statistic_files, [])
@@ -261,6 +261,7 @@ else:
     template_ids = range(tmin, tmax)
 
 for tnum in template_ids:
+    print(tnum)
     tid0g = trigs0.set_template(tnum)
     tid1g = trigs1.set_template(tnum)
 
@@ -386,6 +387,10 @@ for tnum in template_ids:
             else:
                 c = rank_method.coinc(s0[i0], s1[i1], slide, args.timeslide_interval)
 
+            ##### MLStat change #####
+            if args.ranking_statistic[:2] == 'ml':
+                cp = rank_method.coinc_prob(s0[i0], s1[i1])
+
             #index values of the zerolag triggers
             fi = numpy.where(slide == 0)[0]
 
@@ -405,7 +410,6 @@ for tnum in template_ids:
 
             ##### MLStat change #####
             if args.ranking_statistic[:2] == 'ml':
-                cp = rank_method.coinc_prob(s0[i0], s1[i1])
                 cp = cp[ti]
 
             try:
