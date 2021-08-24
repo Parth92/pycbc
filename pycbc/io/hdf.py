@@ -204,9 +204,10 @@ class StatmapData(DictArray):
 
         ##### MLStat change #####
         if containsMLprobs:
-            groups = ('stat', 'time1', 'time2', 'p1', 'p2', 'p1_GN', 'p2_GN', 'probs',
-                            'trigger_id1', 'trigger_id2', 'template_id',
-                            'decimation_factor', 'timeslide_id')
+            groups = ('stat', 'time1', 'time2', 'pcbc1', 'pcbc2', 
+                        'p_gn1', 'p_gn2', 'p_cbc_c', 'trigger_id1', 
+                        'trigger_id2', 'template_id', 
+                        'decimation_factor', 'timeslide_id')
 
         super(StatmapData, self).__init__(data=data, files=files,
                                           groups=groups)
