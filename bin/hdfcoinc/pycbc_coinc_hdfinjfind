@@ -154,11 +154,11 @@ for trigger_file, injection_file in zip(args.trigger_files,
         ana_end = f['segments/coinc/end'][:]
         time = 0.5 * (time1 + time2)
         if args.ml_processed:
-            p1 = f['foreground/p1'][:]
-            p1_GN = f['foreground/p1_GN'][:]
-            p2 = f['foreground/p2'][:]
-            p2_GN = f['foreground/p2_GN'][:]
-            probs = f['foreground/probs'][:]
+            p1 = f['foreground/pcbc1'][:]
+            p1_GN = f['foreground/p_gn1'][:]
+            p2 = f['foreground/pcbc2'][:]
+            p2_GN = f['foreground/p_gn2'][:]
+            probs = f['foreground/p_cbc_c'][:]
 
     time_sorting = time.argsort()
 
@@ -333,15 +333,15 @@ for trigger_file, injection_file in zip(args.trigger_files,
         hdf_append(fo, 'found_after_vetoes/trigger_id2',
                    trig2[time_sorting][found_fore_v])
         if args.ml_processed:
-            hdf_append(fo, 'found/p1', p1[time_sorting][found_fore])
-            hdf_append(fo, 'found/p1_GN', p1_GN[time_sorting][found_fore])
-            hdf_append(fo, 'found/p2', p2[time_sorting][found_fore])
-            hdf_append(fo, 'found/p2_GN', p2_GN[time_sorting][found_fore])
-            hdf_append(fo, 'found/probs', probs[time_sorting][found_fore])
-            hdf_append(fo, 'found_after_vetoes/p1', p1[time_sorting][found_fore_v])
-            hdf_append(fo, 'found_after_vetoes/p1_GN', p1_GN[time_sorting][found_fore_v])
-            hdf_append(fo, 'found_after_vetoes/p2', p2[time_sorting][found_fore_v])
-            hdf_append(fo, 'found_after_vetoes/p2_GN', p2_GN[time_sorting][found_fore_v])
-            hdf_append(fo, 'found_after_vetoes/probs', probs[time_sorting][found_fore_v])
+            hdf_append(fo, 'found/pcbc1', p1[time_sorting][found_fore])
+            hdf_append(fo, 'found/p_gn1', p1_GN[time_sorting][found_fore])
+            hdf_append(fo, 'found/pcbc2', p2[time_sorting][found_fore])
+            hdf_append(fo, 'found/p_gn2', p2_GN[time_sorting][found_fore])
+            hdf_append(fo, 'found/p_cbc_c', probs[time_sorting][found_fore])
+            hdf_append(fo, 'found_after_vetoes/pcbc1', p1[time_sorting][found_fore_v])
+            hdf_append(fo, 'found_after_vetoes/p_gn1', p1_GN[time_sorting][found_fore_v])
+            hdf_append(fo, 'found_after_vetoes/pcbc2', p2[time_sorting][found_fore_v])
+            hdf_append(fo, 'found_after_vetoes/p_gn2', p2_GN[time_sorting][found_fore_v])
+            hdf_append(fo, 'found_after_vetoes/p_cbc_c', probs[time_sorting][found_fore_v])
 
     injection_index += len(sim_table)
