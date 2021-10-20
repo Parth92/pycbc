@@ -360,6 +360,32 @@ def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir,
         out += node.output_files
     return out
 
+def merge_single_detector_hdf_files_pregenerated(workflow, bank_file, trigger_files, out_dir, tags=None):
+    if tags is None:
+        tags = []
+    make_analysis_dir(out_dir)
+
+    mergetrig_outfiles = FileList([])
+    file_attrs = {'segs' : workflow.analysis_time, 'tags' : tags}
+    mergetrigpaths = workflow.cp.get_opt_tags('hdf_trigger_merge', 'output-files', tags).split(' ')
+    # allowing only 2 or 3 ifos
+    assert len(mergetrigpaths) == 2 or len(mergetrigpaths) == 3
+    for mergetrigpath in mergetrigpaths:
+        if 'H1' in mergetrigpath:
+            file_attrs['ifos'] = ['H1']
+        elif 'L1' in mergetrigpath:
+            file_attrs['ifos'] = ['L1']
+        elif 'V1' in mergetrigpath:
+            file_attrs['ifos'] = ['V1']
+
+        # curr_file = resolve_url_to_file(mergetrigpath, attrs=file_attrs)
+        curr_file = File(file_attrs['ifos'], "INPUT", file_attrs['segs'], file_url=mergetrigpath, tags=tags)
+        curr_file.addPFN('file://'+curr_file.storage_path)
+
+        # print('found trig file: '+mergetrigpath)
+        mergetrig_outfiles.append(curr_file)
+    return mergetrig_outfiles
+
 def setup_trigger_fitting(workflow, insps, hdfbank, veto_file, veto_name,
                           output_dir=None, tags=None, omit_jobs=False):
     if not workflow.cp.has_option('workflow-coincidence', 'do-trigger-fitting'):
