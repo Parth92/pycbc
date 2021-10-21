@@ -118,6 +118,19 @@ def compute_inj_optimal_snr(workflow, inj_file, precalc_psd_files, out_dir,
 
     return merge_node.output_files[0]
 
+def get_pregenerated_optsnr_file(workflow, tags=None):
+    file_attrs = {'segs' : workflow.analysis_time, 'tags' : tags}
+    fit_files = workflow.cp.get_opt_tags('optimal_snr', 'output-files', tags).split(' ')
+    # only one file per injtype
+    assert len(fit_files) == 1
+    # make sure it is correct file
+    assert tags[0] in fit_files[0]
+    pregenerated_fit_file = File(workflow.ifos, "optimal_snr_file", file_attrs['segs'], file_url=fit_files[0], tags=tags)
+    # set the physical file name
+    pregenerated_fit_file.PFN(pregenerated_fit_file.storage_path, "local")
+
+    return pregenerated_fit_file
+
 def cut_distant_injections(workflow, inj_file, out_dir, tags=None):
     "Set up a job for removing injections that are too distant to be seen"
     if tags is None:

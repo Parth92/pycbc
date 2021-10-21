@@ -343,8 +343,9 @@ def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir,
             elif 'V1' in mergetrigpath:
                 file_attrs['ifos'] = ['V1']
 
-            curr_file = resolve_url_to_file(mergetrigpath, attrs=file_attrs)
-            # print('found trig file: '+mergetrigpath)
+            curr_file = File(file_attrs['ifos'], "INPUT", file_attrs['segs'], file_url=mergetrigpath, tags=tags)
+            # set the physical file name
+            curr_file.PFN(curr_file.storage_path, "local")
             mergetrig_outfiles.append(curr_file)
 
     for ifo in workflow.ifos:
@@ -360,10 +361,9 @@ def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir,
         out += node.output_files
     return out
 
-def merge_single_detector_hdf_files_pregenerated(workflow, bank_file, trigger_files, out_dir, tags=None):
+def merge_single_detector_hdf_files_pregenerated(workflow, bank_file, trigger_files, tags=None):
     if tags is None:
         tags = []
-    make_analysis_dir(out_dir)
 
     mergetrig_outfiles = FileList([])
     file_attrs = {'segs' : workflow.analysis_time, 'tags' : tags}
@@ -378,11 +378,10 @@ def merge_single_detector_hdf_files_pregenerated(workflow, bank_file, trigger_fi
         elif 'V1' in mergetrigpath:
             file_attrs['ifos'] = ['V1']
 
-        # curr_file = resolve_url_to_file(mergetrigpath, attrs=file_attrs)
         curr_file = File(file_attrs['ifos'], "INPUT", file_attrs['segs'], file_url=mergetrigpath, tags=tags)
-        curr_file.addPFN('file://'+curr_file.storage_path)
+        # set the physical file name
+        curr_file.PFN(curr_file.storage_path, "local")
 
-        # print('found trig file: '+mergetrigpath)
         mergetrig_outfiles.append(curr_file)
     return mergetrig_outfiles
 
@@ -414,6 +413,30 @@ def setup_trigger_fitting(workflow, insps, hdfbank, veto_file, veto_name,
                 workflow += smooth_node
             smoothed_fit_files += smooth_node.output_files
         return smoothed_fit_files
+
+def get_pregenerated_fit_files(workflow, tags=None):
+    if not workflow.cp.has_option('workflow-coincidence', 'do-trigger-fitting'):
+        return FileList()
+    else:
+        smoothed_fit_files = FileList([])
+        file_attrs = {'segs' : workflow.analysis_time, 'tags' : tags}
+        fit_files = workflow.cp.get_opt_tags('fit_over_param', 'output-files', tags).split(' ')
+        # allowing only 2 or 3 ifos
+        assert len(fit_files) == 2 or len(fit_files) == 3
+        for fit_file in fit_files:
+            if 'H1' in fit_file:
+                file_attrs['ifos'] = ['H1']
+            elif 'L1' in fit_file:
+                file_attrs['ifos'] = ['L1']
+            elif 'V1' in fit_file:
+                file_attrs['ifos'] = ['V1']
+
+            curr_file = File(file_attrs['ifos'], "INPUT", file_attrs['segs'], file_url=fit_file, tags=tags)
+            # set the physical file name
+            curr_file.PFN(curr_file.storage_path, "local")
+
+            smoothed_fit_files.append(curr_file)
+    return smoothed_fit_files
 
 def find_injections_in_hdf_coinc(workflow, inj_coinc_file, inj_xml_file,
                                  veto_file, veto_name, out_dir, tags=None):
