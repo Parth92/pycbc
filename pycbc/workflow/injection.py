@@ -31,7 +31,7 @@ https://ldas-jobs.ligo.caltech.edu/~cbc/docs/pycbc/NOTYETCREATED.html
 
 import logging
 from six.moves import configparser as ConfigParser
-from pycbc.workflow.core import FileList, make_analysis_dir, Node
+from pycbc.workflow.core import FileList, make_analysis_dir, Node, File
 from pycbc.workflow.core import Executable, resolve_url_to_file
 from pycbc.workflow.jobsetup import (LalappsInspinjExecutable,
         LigolwCBCJitterSkylocExecutable, LigolwCBCAlignTotalSpinExecutable,
